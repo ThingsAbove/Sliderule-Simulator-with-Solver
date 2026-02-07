@@ -456,21 +456,30 @@
             if (resultScaleName && resultScaleName !== baseScaleName) scalesToShow.push(resultScaleName);
             steps.push({ action: function () { ensureSide(scalesToShow); sidesUsed.back = true; }, delay: 100 });
             steps.push({ action: function () { undimScales(scalesToShow); changeMarkings('hairline', true); }, delay: 500 });
-            var expM = exp <= 10 ? exp : exp / Math.pow(10, Math.floor(Math.log10(exp)));
+            var expM;
+            if (exp < 0.1) expM = exp * 100;
+            else if (exp < 1) expM = exp * 10;
+            else if (exp <= 10) expM = exp;
+            else expM = exp / Math.pow(10, Math.floor(Math.log10(exp)));
+            var scaleJumpHint = '';
+            if (exp < 1 && exp >= 0.1) scaleJumpHint = ' Exponent between 0.1 and 1.0: result is one scale down (e.g. LL3 → LL2).';
+            else if (exp < 0.1 && exp >= 0.01) scaleJumpHint = ' Exponent between 0.01 and 0.1: result is two scales down (e.g. LL3 → LL1).';
+            else if (exp < 0.01 && exp > 0) scaleJumpHint = ' Exponent &lt; 0.01: result is three scales down.';
+            var resultReadD = (result >= 1 && result < 10) ? crnu(result, 4) : (result >= 0.1 && result < 1 ? crnu(result, 4) : Number(result).toPrecision(4));
             steps.push({ action: function () {
-              message('Power ' + crnu(base, 5) + '^' + exp + ' using LL scales: set the cursor so the hairline is over ' + crnu(manBase.m, 5) + ' on the ' + baseScaleLabel + ' scale.');
+              message('Power ' + crnu(base, 3) + '^' + exp + ' using LL scales: set the cursor so the hairline is over ' + crnu(manBase.m, 3) + ' on the ' + baseScaleLabel + ' scale.');
             }, delay: delayMsg });
             steps.push({ action: function () { cursorTo(baseScaleName, manBase.m); }, delay: delayAction });
             steps.push({ action: function () {
-              message('Move the slide so the left index (1) of the C scale is under the cursor. The rule is now set for base ' + crnu(base, 5) + '.');
+              message('Move the slide so the left index (1) of the C scale is under the cursor. The rule is now set for base ' + crnu(base, 3) + '.');
             }, delay: delayMsg });
             steps.push({ action: function () { slideTo('C', 1); }, delay: delayAction });
             steps.push({ action: function () {
-              message('Move the cursor to ' + crnu(expM, 5) + ' on the C scale' + (exp > 10 ? ' (representing exponent ' + exp + '; use ' + crnu(expM, 5) + ' because ' + exp + ' is off the physical C scale).' : '') + '.');
+              message('Move the cursor to ' + crnu(expM, 3) + ' on the C scale (representing exponent ' + exp + ').' + (exp > 10 ? ' Use ' + crnu(expM, 3) + ' because ' + exp + ' is off the physical C scale.' : (exp < 1 ? ' For exponent &lt; 1 the result appears on a lower LL scale.' : '')) + scaleJumpHint);
             }, delay: delayMsg });
             steps.push({ action: function () { cursorTo('C', expM); }, delay: delayAction });
             steps.push({ action: function () {
-              message('Read ' + crnu(result, 5) + ' under the cursor on the ' + (resultScaleLabel || baseScaleLabel) + ' scale.' + (resultScaleName ? ' The cursor also shows mantissa ' + crnu(manResult.m, 5) + ' on D for the next step.' : ''));
+              message('Read ' + resultReadD + ' under the cursor on the ' + (resultScaleLabel || baseScaleLabel) + ' scale. (Do not use the D scale here—it is log-log; the value under the cursor on D is not the result mantissa.)');
             }, delay: delayMsg });
             currentExp = resultExp;
             lastWasBack = true;

@@ -394,14 +394,39 @@ var checkValue = function (name, value, tolerance) {
 }
 
 var sequencerTimeout = null;
-var sequencer = function (steps, index) {
+var sequencer = function (steps, index, onStep) {
   if (! steps) return;
-  if (index == undefined) {sequencerTimeout = setTimeout (function () {sequencer (steps, 0);}, steps [0] . delay); return;}
+  if (index === undefined) { sequencerTimeout = setTimeout (function () { sequencer (steps, 0, onStep); }, steps [0] . delay); return; }
   if (index >= steps . length) return;
   steps [index] . action ();
+  if (typeof onStep === 'function') onStep (index + 1);
   index += 1;
   if (index >= steps . length) return;
-  sequencerTimeout = setTimeout (function () {sequencer (steps, index);}, steps [index] . delay);
+  sequencerTimeout = setTimeout (function () { sequencer (steps, index, onStep); }, steps [index] . delay);
+};
+
+var dynamicTutorialState = { steps: null, index: 0, info: 'info' };
+var dynamicTutorialStepForward = function () {
+  var s = dynamicTutorialState;
+  if (! s . steps || s . index >= s . steps . length) return;
+  clearTimeout (sequencerTimeout);
+  s . steps [s . index] . action ();
+  s . index += 1;
+};
+var dynamicTutorialStepBack = function () {
+  var s = dynamicTutorialState;
+  clearTimeout (sequencerTimeout);
+  if (! s . steps || s . index <= 0) return;
+  s . index -= 1;
+  var el = document . getElementById (s . info);
+  if (el) el . innerHTML = '';
+  for (var i = 0; i < s . index; i++) s . steps [i] . action ();
+};
+var dynamicTutorialPause = function () { clearTimeout (sequencerTimeout); };
+var dynamicTutorialPlay = function () {
+  var s = dynamicTutorialState;
+  if (! s . steps || s . index >= s . steps . length) return;
+  sequencer (s . steps, s . index, function (nextIndex) { s . index = nextIndex; });
 };
 
 var slideruleLessons = [];
@@ -433,12 +458,20 @@ var playLesson = function (lessons, info) {
 	alert ("Scenario [" + lesson_id + "] not found.");
 };
 
-var playDynamicLesson = function (steps, info) {
+var playDynamicLesson = function (steps, info, onStepCallback) {
 	clearTimeout (sequencerTimeout);
 	if (info == undefined) info = 'info';
 	var el = document . getElementById (info);
 	if (el) el . innerHTML = "";
-	if (steps && steps . length) sequencer (steps);
+	dynamicTutorialState . steps = steps;
+	dynamicTutorialState . index = 0;
+	dynamicTutorialState . info = info;
+	if (steps && steps . length) {
+		sequencer (steps, undefined, function (nextIndex) {
+			dynamicTutorialState . index = nextIndex;
+			if (typeof onStepCallback === 'function') onStepCallback (nextIndex);
+		});
+	}
 };
 
 
