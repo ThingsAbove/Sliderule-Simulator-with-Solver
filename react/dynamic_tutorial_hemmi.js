@@ -165,8 +165,23 @@
         ensureFront();
         var transferVal = currentMantissa;
         var actualVal = op.left;
-        steps.push({ action: function () { message('Flip the rule to the front. The cursor is linked—it is already at the correct position. The value you are multiplying is ' + crnu(actualVal, 5) + ' (mantissa ' + crnu(transferVal, 5) + ' on D).'); }, delay: delayMsg });
-        steps.push({ action: function () { if (typeof changeSide === 'function') changeSide('front'); ensureSide(['C', 'D']); cursorTo('D', transferVal); }, delay: delayAction });
+        steps.push({
+          action: function () {
+            var flipMsg = (typeof currentSideHasScales === 'function' && currentSideHasScales(['C', 'D']))
+              ? 'The cursor is linked—it is already at the correct position. The value you are multiplying is ' + crnu(actualVal, 5) + ' (mantissa ' + crnu(transferVal, 5) + ' on D). C and D are on this side; no need to flip.'
+              : 'Flip the rule to the front. The cursor is linked—it is already at the correct position. The value you are multiplying is ' + crnu(actualVal, 5) + ' (mantissa ' + crnu(transferVal, 5) + ' on D).';
+            message(flipMsg);
+          },
+          delay: delayMsg
+        });
+        steps.push({
+          action: function () {
+            if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
+            ensureSide(['C', 'D']);
+            cursorTo('D', transferVal);
+          },
+          delay: delayAction
+        });
         lastWasBack = false;
       }
       var a = currentMantissa;
@@ -197,7 +212,7 @@
         steps.push({ action: function () { undimScales(['CF', 'DF']); changeMarkings('hairline', true); }, delay: 500 });
         steps.push({ action: function () { message('Second factor ' + crnu(cursorCVal, 5) + ' would be off C; use folded scales. Set cursor to ' + crnu(firstFactor, 5) + ' on DF, align index on CF, then cursor to ' + crnu(cursorCVal, 5) + ' on CF and read product on DF.'); }, delay: delayMsg });
         steps.push({ action: function () {
-          if (typeof changeSide === 'function') changeSide('front');
+          if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['CF', 'DF']) && typeof changeSide === 'function') changeSide('front');
           ensureSide(['CF', 'DF']);
           cursorTo('DF', firstFactor);
         }, delay: delayAction });
@@ -210,7 +225,7 @@
           message(useRightIndex ? 'Move the slide so the right index (10) on C is over ' + crnu(firstFactor, 5) + ' on the D scale.' : 'Move the slide so the left index (1) on C is over ' + crnu(firstFactor, 5) + ' on the D scale.');
         }, delay: delayMsg });
         steps.push({ action: function () {
-          if (typeof changeSide === 'function') changeSide('front');
+          if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
           ensureSide(['C', 'D']);
           cursorTo('D', firstFactor);
         }, delay: delayAction });
@@ -227,8 +242,23 @@
       if (lastWasBack) {
         ensureFront();
         var transferVal = currentMantissa;
-        steps.push({ action: function () { message('Result so far is on the other side. Switch to front and set cursor to ' + crnu(transferVal, 5) + ' on D.'); }, delay: delayMsg });
-        steps.push({ action: function () { cursorTo('D', transferVal); }, delay: delayAction });
+        steps.push({
+          action: function () {
+            var msg = (typeof currentSideHasScales === 'function' && currentSideHasScales(['C', 'D']))
+              ? 'Set cursor to ' + crnu(transferVal, 5) + ' on D (C and D are on this side; no need to flip).'
+              : 'Result so far is on the other side. Switch to front and set cursor to ' + crnu(transferVal, 5) + ' on D.';
+            message(msg);
+          },
+          delay: delayMsg
+        });
+        steps.push({
+          action: function () {
+            if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
+            ensureSide(['C', 'D']);
+            cursorTo('D', transferVal);
+          },
+          delay: delayAction
+        });
         lastWasBack = false;
       }
       var dividend = currentMantissa;
@@ -281,6 +311,39 @@
       return { slideShift: newSlideShift, cursorAtIndex: true };
     }
 
+    // Which LL scale (LL1, LL2, LL3) contains value > 1? LL1: e^0.01..e^0.1, LL2: e^0.1..e, LL3: e..e^10.
+    function llScaleForValue(value) {
+      if (value <= 0 || value <= 1) return null;
+      var ln = Math.log(value);
+      if (ln <= 0.1) return 'LL1';
+      if (ln <= 1) return 'LL2';
+      if (ln <= 10) return 'LL3';
+      return null;
+    }
+
+    // Find the actual scale.left of an LL-type scale that contains the value (for cursorTo).
+    function findLLScaleNameForValue(value) {
+      var list = (typeof sliderules !== 'undefined' && sliderules.sliderules) ? sliderules.sliderules : (window.sliderules && window.sliderules.sliderules);
+      if (!list) return null;
+      for (var i = 0; i < list.length; i++) {
+        var sr = list[i];
+        for (var r in sr.rules) {
+          var rule = sr.rules[r];
+          for (var s in rule.scales) {
+            var scale = rule.scales[s];
+            var left = scale.left;
+            if (left && (left === 'LL1' || left === 'LL2' || left === 'LL3' || left.indexOf('LL2') >= 0 || left.indexOf('LL3') >= 0 || left.indexOf('LL1') >= 0) && typeof scale.location === 'function') {
+              try {
+                var loc = scale.location(value);
+                if (loc >= -0.02 && loc <= 1.02) return left;
+              } catch (e) {}
+            }
+          }
+        }
+      }
+      return null;
+    }
+
     function stepPower(op) {
       var base = op.left;
       var exp = op.right;
@@ -326,6 +389,96 @@
         steps.push({ action: function () { cursorTo('K', manBase.m); }, delay: delayAction });
         steps.push({ action: function () { message('Read result on D scale: ' + crnu(result, 5)); }, delay: delayMsg });
         currentExp = Math.floor(currentExp / 3);
+      } else if (base > 0 && result > 0) {
+        var LL_LIMIT = Math.exp(10);
+        var resultOffScale = result > LL_LIMIT;
+        var resultExp = Math.floor(Math.log10(Math.abs(result)));
+
+        if (resultOffScale) {
+          // Result exceeds LL3 (~22,026). LL scales cannot show it. Use log method: log10(a^b) = b × log10(a).
+          var log10Base = Math.log10(base);
+          var product = exp * log10Base;
+          var characteristic = Math.floor(product);
+          var logMantissa = product - characteristic;
+          if (logMantissa < 0) logMantissa += 1;
+          var resultMantissaFromLog = Math.pow(10, logMantissa);
+          var dVal = log10Base >= 1 ? log10Base : log10Base * 10;
+          var cVal = exp <= 10 ? exp : exp / Math.pow(10, Math.floor(Math.log10(exp)));
+          var multProduct = dVal * cVal;
+          var useRightIndex = multProduct > 10;
+          var cIndex = useRightIndex ? 10 : 1;
+          var readOnD = useRightIndex ? multProduct / 10 : multProduct;
+          function toSigFigs(x, n) { if (x === 0 || !isFinite(x)) return x; return Number(Number(x).toPrecision(n)); }
+          var log10BaseD = toSigFigs(log10Base, 3);
+          var productD = toSigFigs(product, 4);
+          var logMantissaD = toSigFigs(logMantissa, 3);
+          var resultMantD = toSigFigs(resultMantissaFromLog, 3);
+          var resultD = toSigFigs(result, 3);
+          var indexLabel = useRightIndex ? 'right index (10)' : 'left index (1)';
+          var lScaleName = 'LogX     L';
+          ensureBack();
+          steps.push({ action: function () { ensureSide([lScaleName, 'C', 'D']); sidesUsed.back = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales([lScaleName, 'C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+          steps.push({ action: function () {
+            message(crnu(base, 2) + '^' + exp + ' = ' + resultD + '×10^' + characteristic + ' exceeds the end of the LL3 scale (~22,026). Use the log method: log₁₀(a^b) = b × log₁₀(a).');
+          }, delay: delayMsg });
+          steps.push({ action: function () {
+            message('Step A: Find log₁₀(' + crnu(base, 2) + '). Cursor to ' + crnu(manBase.m, 3) + ' on D; read on L: log₁₀(' + crnu(base, 2) + ') ≈ ' + log10BaseD + '.');
+          }, delay: delayMsg });
+          steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
+          steps.push({ action: function () {
+            message('Step B: Compute ' + exp + ' × ' + log10BaseD + ' on C and D. Set the ' + indexLabel + ' of C over ' + crnu(dVal, 3) + ' on D (representing ' + log10BaseD + '). Move the cursor to ' + crnu(cVal, 3) + ' on the C scale (representing ' + exp + ').' + (useRightIndex ? ' Using the right index keeps 6.6 on C to the left, over the result on D.' : ''));
+          }, delay: delayMsg });
+          steps.push({ action: function () { cursorTo('D', dVal); slideTo('C', cIndex); }, delay: delayAction });
+          steps.push({ action: function () { cursorTo('C', cVal); }, delay: delayAction });
+          steps.push({ action: function () {
+            message('Step C: Read ' + crnu(readOnD, 3) + ' on D (i.e. ' + productD + '). Characteristic ' + characteristic + ', mantissa of log ≈ ' + logMantissaD + '.');
+          }, delay: delayMsg });
+          steps.push({ action: function () {
+            message('Step D: Antilog: cursor to ' + logMantissaD + ' on the L scale; read result mantissa on D ≈ ' + resultMantD + ' (slide rule reading, 3–4 significant figures).');
+          }, delay: delayMsg });
+          steps.push({ action: function () { cursorTo(lScaleName, logMantissa); }, delay: delayAction });
+          steps.push({ action: function () {
+            message('Result: ' + crnu(base, 2) + '^' + exp + ' = ' + resultMantD + ' × 10^' + characteristic + ' ≈ ' + resultD + '×10^' + characteristic + '.');
+          }, delay: delayMsg });
+          currentMantissa = manResult.m;
+          currentExp = resultExp;
+          lastWasBack = true;
+          lastResultOnD = true;
+        } else {
+          var baseScaleLabel = llScaleForValue(base);
+          var baseScaleName = findLLScaleNameForValue(base);
+          var resultScaleLabel = llScaleForValue(result);
+          var resultScaleName = findLLScaleNameForValue(result);
+          if (baseScaleLabel && baseScaleName) {
+            ensureBack();
+            var scalesToShow = [baseScaleName, 'C', 'D'];
+            if (resultScaleName && resultScaleName !== baseScaleName) scalesToShow.push(resultScaleName);
+            steps.push({ action: function () { ensureSide(scalesToShow); sidesUsed.back = true; }, delay: 100 });
+            steps.push({ action: function () { undimScales(scalesToShow); changeMarkings('hairline', true); }, delay: 500 });
+            var expM = exp <= 10 ? exp : exp / Math.pow(10, Math.floor(Math.log10(exp)));
+            steps.push({ action: function () {
+              message('Power ' + crnu(base, 5) + '^' + exp + ' using LL scales: set the cursor so the hairline is over ' + crnu(manBase.m, 5) + ' on the ' + baseScaleLabel + ' scale.');
+            }, delay: delayMsg });
+            steps.push({ action: function () { cursorTo(baseScaleName, manBase.m); }, delay: delayAction });
+            steps.push({ action: function () {
+              message('Move the slide so the left index (1) of the C scale is under the cursor. The rule is now set for base ' + crnu(base, 5) + '.');
+            }, delay: delayMsg });
+            steps.push({ action: function () { slideTo('C', 1); }, delay: delayAction });
+            steps.push({ action: function () {
+              message('Move the cursor to ' + crnu(expM, 5) + ' on the C scale' + (exp > 10 ? ' (representing exponent ' + exp + '; use ' + crnu(expM, 5) + ' because ' + exp + ' is off the physical C scale).' : '') + '.');
+            }, delay: delayMsg });
+            steps.push({ action: function () { cursorTo('C', expM); }, delay: delayAction });
+            steps.push({ action: function () {
+              message('Read ' + crnu(result, 5) + ' under the cursor on the ' + (resultScaleLabel || baseScaleLabel) + ' scale.' + (resultScaleName ? ' The cursor also shows mantissa ' + crnu(manResult.m, 5) + ' on D for the next step.' : ''));
+            }, delay: delayMsg });
+            currentExp = resultExp;
+            lastWasBack = true;
+            lastResultOnD = false;
+          } else {
+            steps.push({ action: function () { message('Power ' + exp + ': use C/D chain or not supported; result is ' + crnu(result, 5)); }, delay: delayMsg });
+          }
+        }
       } else {
         steps.push({ action: function () { message('Power ' + exp + ': use C/D chain or not supported; result is ' + crnu(result, 5)); }, delay: delayMsg });
       }
@@ -430,7 +583,12 @@
       var op = ops[i];
       if (op.op === 'init') {
         if (isFirstInit) {
-          if (divisionChain) {
+          var coefTimesPower = (i + 3 < ops.length && ops[i + 1].op === 'init' && ops[i + 2].op === '^' && ops[i + 3].op === '*');
+          var powerOnly = (i + 2 < ops.length && ops[i + 1].op === 'init' && ops[i + 2].op === '^' && (i + 3 >= ops.length || ops[i + 3].op !== '*'));
+          if (coefTimesPower || powerOnly) {
+            steps.push({ action: function () { message('Calculate: ' + equationStr); }, delay: 500 });
+            isFirstInit = false;
+          } else if (divisionChain) {
             stepInitForDivision(op);
           } else if (i + 1 < ops.length && ops[i + 1].op === '*') {
             var useRightIndex = false;
@@ -488,7 +646,7 @@
         if (lastResultOnD) ok = checkValue('D', finalMan.m);
         else ok = true;
         if (ok) {
-          message('Mission accomplished! ' + equationStr + ' = ' + crnu(finalVal, 5));
+          message('Result: ' + equationStr + ' = ' + crnu(finalVal, 5));
           return true;
         }
         return false;

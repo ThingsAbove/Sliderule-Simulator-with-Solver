@@ -251,8 +251,20 @@ var hasScales = function (sliderule, names) {
   return true;
 };
 
+/** True if the currently visible side (the active sliderule) has all of the given scale names. */
+var currentSideHasScales = function (names) {
+  var ind;
+  for (ind in sliderules . sliderules) {
+    if (! sliderules . sliderules [ind] . inactive && hasScales (sliderules . sliderules [ind], names)) return true;
+  }
+  return false;
+};
+
 var ensureSide = function (names) {
   var ind;
+  for (ind in sliderules . sliderules) {
+    if (! sliderules . sliderules [ind] . inactive && hasScales (sliderules . sliderules [ind], names)) return;
+  }
   for (ind in sliderules . sliderules) sliderules . sliderules [ind] . inactive = true;
   for (ind in sliderules . sliderules) {
     if (hasScales (sliderules . sliderules [ind], names)) {
