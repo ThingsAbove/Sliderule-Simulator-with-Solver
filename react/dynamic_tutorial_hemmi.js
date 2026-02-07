@@ -60,6 +60,39 @@
     var sidesUsed = { front: false, back: false };
     var lastWasBack = false;
     var lastResultOnD = true;
+
+    // ——— Rule book: body limits, scale positions, division/mult and index choice ———
+    var limitL = 0.03;
+    var limitR = 0.03;
+    function positionC(shift, x) { return shift + Math.log10(x); }
+    function positionCI(shift, x) { return shift + (1 - Math.log10(x)); }
+    function positionCIF(shift, x) { return shift + (1 - Math.log10(x * Math.PI)); }
+    function inRange(pos) { return pos >= -limitL && pos <= 1 + limitR; }
+    function chooseDivisionMethod(chainSlideShift, divisorM) {
+      if (chainSlideShift == null) return 'C';
+      if (inRange(positionCI(chainSlideShift, divisorM))) return 'CI';
+      if (inRange(positionCIF(chainSlideShift, divisorM))) return 'CIF';
+      return 'C';
+    }
+    function whichIndex(slideShift, quotM) {
+      var leftOnBody = inRange(slideShift);
+      var rightOnBody = inRange(slideShift + 1);
+      if (leftOnBody && rightOnBody) return (quotM >= 1) ? 1 : 10;
+      if (rightOnBody) return 10;
+      if (leftOnBody) return 1;
+      return (slideShift + 0.5 >= 0) ? 10 : 1;
+    }
+    function squareRootHalf(x) {
+      if (x <= 0) return 'left';
+      var e = Math.floor(Math.log10(x));
+      return (e % 2 === 0) ? 'left' : 'right';
+    }
+    function cubeRootThird(x) {
+      if (x <= 0) return 0;
+      var e = Math.floor(Math.log10(x));
+      return ((e % 3) + 3) % 3;
+    }
+
     function ensureFront() {
       if (!sidesUsed.front) {
         sidesUsed.front = true;
@@ -81,7 +114,7 @@
     function ensureBack() {
       if (!sidesUsed.back) {
         sidesUsed.back = true;
-        steps.push({ action: function () { ensureSide(['S', 'C']); }, delay: 100 });
+        steps.push({ action: function () { ensureSide(['S', 'D']); }, delay: 100 });
       }
     }
 
@@ -146,27 +179,48 @@
       currentExp = currentExp + manB.exp;
       lastResultOnD = true;
       ensureFront();
-      var useRightIndex = (a * manB.m >= 10);
+      var shiftLeft = -Math.log10(a);
+      var shiftRight = 1 - Math.log10(a);
+      var useCF = false;
+      var useRightIndex = false;
+      if (inRange(positionC(shiftLeft, cursorCVal))) {
+        useRightIndex = false;
+      } else if (inRange(positionC(shiftRight, cursorCVal))) {
+        useRightIndex = true;
+      } else {
+        useCF = true;
+      }
       var firstFactor = a;
       var cIndex = useRightIndex ? 10 : 1;
-      steps.push({ action: function () {
-        message(useRightIndex ? 'Move the slide so the right index (10) on C is over ' + crnu(firstFactor, 5) + ' on the D scale.' : 'Move the slide so the left index (1) on C is over ' + crnu(firstFactor, 5) + ' on the D scale.');
-      }, delay: delayMsg });
-      steps.push({ action: function () {
-        if (typeof changeSide === 'function') changeSide('front');
-        ensureSide(['C', 'D']);
-        cursorTo('D', firstFactor);
-      }, delay: delayAction });
-      steps.push({ action: function () { slideTo('C', cIndex); }, delay: delayAction });
-      steps.push({ action: function () { message('Move the cursor to ' + crnu(cursorCVal, 5) + ' on the C scale.'); }, delay: delayMsg });
-      steps.push({ action: function () { cursorTo('C', cursorCVal); }, delay: delayAction });
-      steps.push({ action: function () { message('Read intermediate result ' + prodMsg + ' on D.' + (useRightIndex ? ' (Adjust decimal: result is ' + prodMsg + '.)' : '')); }, delay: delayMsg });
+      if (useCF) {
+        steps.push({ action: function () { message('Second factor ' + crnu(cursorCVal, 5) + ' would be off C; use folded scales. Set cursor to ' + crnu(firstFactor, 5) + ' on DF, align index on CF, then cursor to ' + crnu(cursorCVal, 5) + ' on CF and read product on DF.'); }, delay: delayMsg });
+        steps.push({ action: function () {
+          if (typeof changeSide === 'function') changeSide('front');
+          ensureSide(['CF', 'DF']);
+          cursorTo('DF', firstFactor);
+        }, delay: delayAction });
+        steps.push({ action: function () { slideTo('CF', 1); }, delay: delayAction });
+        steps.push({ action: function () { cursorTo('CF', cursorCVal); }, delay: delayAction });
+        steps.push({ action: function () { message('Read intermediate result ' + prodMsg + ' on DF.'); }, delay: delayMsg });
+      } else {
+        steps.push({ action: function () {
+          message(useRightIndex ? 'Move the slide so the right index (10) on C is over ' + crnu(firstFactor, 5) + ' on the D scale.' : 'Move the slide so the left index (1) on C is over ' + crnu(firstFactor, 5) + ' on the D scale.');
+        }, delay: delayMsg });
+        steps.push({ action: function () {
+          if (typeof changeSide === 'function') changeSide('front');
+          ensureSide(['C', 'D']);
+          cursorTo('D', firstFactor);
+        }, delay: delayAction });
+        steps.push({ action: function () { slideTo('C', cIndex); }, delay: delayAction });
+        steps.push({ action: function () { message('Move the cursor to ' + crnu(cursorCVal, 5) + ' on the C scale.'); }, delay: delayMsg });
+        steps.push({ action: function () { cursorTo('C', cursorCVal); }, delay: delayAction });
+        steps.push({ action: function () { message('Read intermediate result ' + prodMsg + ' on D.' + (useRightIndex ? ' (Adjust decimal: result is ' + prodMsg + '.)' : '')); }, delay: delayMsg });
+      }
     }
 
-    // Standard division (all cases): cursor is on dividend or previous result. Move SLIDE so divisor on C
-    // is under the cursor. Read quotient on D under left index (1) or right index (10) of C — use the
-    // index that is on the body (left index at slide_shift; right at slide_shift+1).
-    function stepDivide(op, divisionIndexInChain, inDivisionChain) {
+    // Division: CI/CIF shortcut only when cursor is AT THE INDEX (result under index).
+    // After using CI/CIF, cursor is over the quotient on D (not at index); next division must move the slide.
+    function stepDivide(op, divisionIndexInChain, inDivisionChain, chainSlideShift, cursorAtIndex) {
       if (lastWasBack) {
         ensureFront();
         var transferVal = currentMantissa;
@@ -184,31 +238,41 @@
       currentMantissa = manQuot.m;
       currentExp = currentExp - manDiv.exp;
       lastResultOnD = true;
-      ensureFront();
-      var slideShift = Math.log10(dividend) - Math.log10(divisorM);
-      var limitL = 0.03;
-      var limitR = 0.03;
-      var leftIndexOnBody = slideShift >= -limitL && slideShift <= 1 + limitR;
-      var rightIndexOnBody = (slideShift + 1) >= -limitL && (slideShift + 1) <= 1 + limitR;
-      var readIndex = 1;
-      if (leftIndexOnBody && rightIndexOnBody) {
-        readIndex = (manQuot.m >= 1) ? 1 : 10;
-      } else if (rightIndexOnBody) {
-        readIndex = 10;
-      } else if (leftIndexOnBody) {
-        readIndex = 1;
-      } else {
-        readIndex = (slideShift + 0.5 >= 0) ? 10 : 1;
+      var newSlideShift = Math.log10(dividend) - Math.log10(divisorM);
+
+      var useCIorCIF = (inDivisionChain && divisionIndexInChain > 0 && cursorAtIndex &&
+        chooseDivisionMethod(chainSlideShift, divisorM));
+      var method = (useCIorCIF === 'CI' || useCIorCIF === 'CIF') ? useCIorCIF : 'C';
+
+      if (method === 'CI') {
+        ensureFrontWithCI();
+        steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': Move the cursor to ' + crnu(divisorM, 5) + ' on the CI scale. Read the intermediate result (' + quotMsg + ') on the D scale under the cursor.'); }, delay: delayMsg });
+        steps.push({ action: function () { ensureSide(['C', 'D', 'CI']); cursorTo('CI', divisorM); }, delay: delayAction });
+        return { slideShift: chainSlideShift, cursorAtIndex: false };
       }
+      if (method === 'CIF') {
+        ensureFrontWithCI();
+        steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': Move the cursor to ' + crnu(divisorM, 5) + ' on the CIF scale. Read the intermediate result (' + quotMsg + ') on the D scale under the cursor.'); }, delay: delayMsg });
+        steps.push({ action: function () { ensureSide(['C', 'D', 'CI', 'CIF', 'DF']); cursorTo('CIF', divisorM); }, delay: delayAction });
+        return { slideShift: chainSlideShift, cursorAtIndex: false };
+      }
+
+      ensureFront();
+      var readIndex = whichIndex(newSlideShift, manQuot.m);
       var indexLabel = (readIndex === 10) ? 'right index (10)' : 'left index (1)';
       if (inDivisionChain && divisionIndexInChain > 0) {
-        steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': cursor is at the previous result. Move the slide so ' + crnu(divisorM, 5) + ' on C is under the cursor. Read ' + quotMsg + ' on D under the ' + indexLabel + '.'); }, delay: delayMsg });
+        if (cursorAtIndex) {
+          steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': Move the slide so ' + crnu(divisorM, 5) + ' on the C scale is under the cursor. The intermediate result (' + quotMsg + ') is now located on the D scale under the slide index.'); }, delay: delayMsg });
+        } else {
+          steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': You must move the slide to continue the chain. Move the slide so the index (or ' + crnu(divisorM, 5) + ' on the C scale) is aligned with the previous result (' + crnu(dividend, 5) + ') on the D scale. The new result (' + quotMsg + ') will be found under the slide index on the D scale.'); }, delay: delayMsg });
+        }
       } else {
-        steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': move the slide so ' + crnu(divisorM, 5) + ' on C is under the cursor. Read ' + quotMsg + ' on D under the ' + indexLabel + '.'); }, delay: delayMsg });
+        steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': Move the slide so ' + crnu(divisorM, 5) + ' on the C scale is under the cursor. The intermediate result (' + quotMsg + ') is now located on the D scale under the slide index.'); }, delay: delayMsg });
       }
       steps.push({ action: function () { slideTo('C', divisorM); }, delay: delayAction });
       steps.push({ action: function () { cursorTo('C', readIndex); }, delay: delayAction });
-      steps.push({ action: function () { message((inDivisionChain ? 'Intermediate result ' : 'Result ') + quotMsg + ' on D under the ' + indexLabel + '.'); }, delay: delayMsg });
+      steps.push({ action: function () { message((inDivisionChain ? 'Intermediate result (' : 'Result (') + quotMsg + ') on the D scale under the ' + indexLabel + '.'); }, delay: delayMsg });
+      return { slideShift: newSlideShift, cursorAtIndex: true };
     }
 
     function stepPower(op) {
@@ -229,10 +293,12 @@
         lastResultOnD = false;
       } else if (exp === 0.5) {
         ensureFront();
+        var half = squareRootHalf(base);
+        var aVal = half === 'left' ? manBase.m : manBase.m * 10;
         steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
         steps.push({ action: function () { isolate(['A', 'D']); changeMarkings('hairline', true); dimmm(255, 80, 8); }, delay: 500 });
-        steps.push({ action: function () { message('Square root: cursor to ' + crnu(base, 5) + ' on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
-        steps.push({ action: function () { cursorTo('A', manBase.m); }, delay: delayAction });
+        steps.push({ action: function () { message('Square root: use ' + half + ' half of A (exponent ' + (half === 'left' ? 'even' : 'odd') + '). Cursor to ' + crnu(base, 5) + ' on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+        steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
         steps.push({ action: function () { message('Read result on D scale: ' + crnu(result, 5)); }, delay: delayMsg });
         currentExp = Math.floor(currentExp / 2);
       } else if (exp === 3) {
@@ -246,9 +312,11 @@
         lastResultOnD = false;
       } else if (Math.abs(exp - 1/3) < 1e-9) {
         ensureFront();
+        var third = cubeRootThird(base);
+        var thirdName = (third === 0) ? 'left' : (third === 1 ? 'middle' : 'right');
         steps.push({ action: function () { ensureSide(['K', 'D']); sidesUsed.front = true; }, delay: 100 });
         steps.push({ action: function () { isolate(['K', 'D']); changeMarkings('hairline', true); dimmm(255, 80, 8); }, delay: 500 });
-        steps.push({ action: function () { message('Cube root: cursor to ' + crnu(base, 5) + ' on K, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+        steps.push({ action: function () { message('Cube root: use ' + thirdName + ' third of K. Cursor to ' + crnu(base, 5) + ' on K, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
         steps.push({ action: function () { cursorTo('K', manBase.m); }, delay: delayAction });
         steps.push({ action: function () { message('Read result on D scale: ' + crnu(result, 5)); }, delay: delayMsg });
         currentExp = Math.floor(currentExp / 3);
@@ -264,10 +332,12 @@
       var manResult = toMantissa(result);
       currentMantissa = manResult.m;
       ensureFront();
+      var half = squareRootHalf(arg);
+      var aVal = half === 'left' ? manArg.m : manArg.m * 10;
       steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
       steps.push({ action: function () { isolate(['A', 'D']); changeMarkings('hairline', true); dimmm(255, 80, 8); }, delay: 500 });
-      steps.push({ action: function () { message('Square root of ' + crnu(arg, 5) + ': cursor to value on A, read on D.'); }, delay: delayMsg });
-      steps.push({ action: function () { cursorTo('A', manArg.m); }, delay: delayAction });
+      steps.push({ action: function () { message('Square root of ' + crnu(arg, 5) + ': use ' + half + ' half of A. Cursor to value on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+      steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
       steps.push({ action: function () { message('Result ' + crnu(result, 5) + ' on D scale.'); }, delay: delayMsg });
       lastResultOnD = true;
     }
@@ -276,11 +346,11 @@
       var arg = op.arg;
       var result = op.result;
       ensureBack();
-      steps.push({ action: function () { ensureSide(['S', 'C']); sidesUsed.back = true; }, delay: 100 });
-      steps.push({ action: function () { isolate(['S', 'C']); changeMarkings('hairline', true); dimmm(255, 40, 8); }, delay: 500 });
-      steps.push({ action: function () { message('Sine of ' + crnu(arg, 5) + ' degrees: cursor to angle on S, read value on C.'); }, delay: delayMsg });
+      steps.push({ action: function () { ensureSide(['S', 'D']); sidesUsed.back = true; }, delay: 100 });
+      steps.push({ action: function () { isolate(['S', 'D']); changeMarkings('hairline', true); dimmm(255, 40, 8); }, delay: 500 });
+      steps.push({ action: function () { message('Sine of ' + crnu(arg, 5) + ' degrees: cursor to angle on S, read value on D.'); }, delay: delayMsg });
       steps.push({ action: function () { cursorTo('S', arg); }, delay: delayAction });
-      steps.push({ action: function () { message('Read sin = ' + crnu(result, 5) + ' on C (adjust decimal).'); }, delay: delayMsg });
+      steps.push({ action: function () { message('Read sin = ' + crnu(result, 5) + ' on D (adjust decimal).'); }, delay: delayMsg });
       currentMantissa = result >= 1 && result < 10 ? result : (result * 10);
       if (currentMantissa >= 10) currentMantissa /= 10;
       lastWasBack = true;
@@ -291,11 +361,11 @@
       var arg = op.arg;
       var result = op.result;
       ensureBack();
-      steps.push({ action: function () { ensureSide(['S', 'C']); sidesUsed.back = true; }, delay: 100 });
-      steps.push({ action: function () { isolate(['S', 'C']); changeMarkings('hairline', true); dimmm(255, 40, 8); }, delay: 500 });
-      steps.push({ action: function () { message('Cosine of ' + crnu(arg, 5) + ' degrees: use S scale; cos(θ) = sin(90-θ).'); }, delay: delayMsg });
+      steps.push({ action: function () { ensureSide(['S', 'D']); sidesUsed.back = true; }, delay: 100 });
+      steps.push({ action: function () { isolate(['S', 'D']); changeMarkings('hairline', true); dimmm(255, 40, 8); }, delay: 500 });
+      steps.push({ action: function () { message('Cosine of ' + crnu(arg, 5) + ' degrees: cos(θ) = sin(90−θ). Cursor to ' + crnu(90 - arg, 5) + ' on S, read on D.'); }, delay: delayMsg });
       steps.push({ action: function () { cursorTo('S', 90 - arg); }, delay: delayAction });
-      steps.push({ action: function () { message('Read cos = ' + crnu(result, 5) + ' on C.'); }, delay: delayMsg });
+      steps.push({ action: function () { message('Read cos = ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
       currentMantissa = result >= 1 && result < 10 ? result : (result * 10);
       if (currentMantissa >= 10) currentMantissa /= 10;
     }
@@ -304,11 +374,11 @@
       var arg = op.arg;
       var result = op.result;
       ensureBack();
-      steps.push({ action: function () { ensureSide(['T', 'C']); sidesUsed.back = true; }, delay: 100 });
-      steps.push({ action: function () { isolate(['T', 'C']); changeMarkings('hairline', true); dimmm(255, 40, 8); }, delay: 500 });
-      steps.push({ action: function () { message('Tangent of ' + crnu(arg, 5) + ' degrees: cursor to angle on T, read on C.'); }, delay: delayMsg });
+      steps.push({ action: function () { ensureSide(['T', 'D']); sidesUsed.back = true; }, delay: 100 });
+      steps.push({ action: function () { isolate(['T', 'D']); changeMarkings('hairline', true); dimmm(255, 40, 8); }, delay: 500 });
+      steps.push({ action: function () { message('Tangent of ' + crnu(arg, 5) + ' degrees: cursor to angle on T, read on D.'); }, delay: delayMsg });
       steps.push({ action: function () { cursorTo('T', arg); }, delay: delayAction });
-      steps.push({ action: function () { message('Read tan = ' + crnu(result, 5) + ' on C.'); }, delay: delayMsg });
+      steps.push({ action: function () { message('Read tan = ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
       currentMantissa = result >= 1 && result < 10 ? result : (result * 10);
       if (currentMantissa >= 10) currentMantissa /= 10;
       lastWasBack = true;
@@ -335,7 +405,7 @@
       steps.push({ action: function () { ensureSide(['LogX     L', 'D']); sidesUsed.back = true; }, delay: 100 });
       steps.push({ action: function () { isolate(['LogX     L', 'D']); changeMarkings('hairline', true); dimmm(255, 80, 8); }, delay: 500 });
       var manArg = toMantissa(arg);
-      steps.push({ action: function () { message('Natural log of ' + crnu(arg, 5) + ': find log10 on L, then multiply by 2.303.'); }, delay: delayMsg });
+      steps.push({ action: function () { message('Natural log of ' + crnu(arg, 5) + ': cursor to value on D, read log10 on L. Then ln(x) = log10(x) × 2.303.'); }, delay: delayMsg });
       steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
       steps.push({ action: function () { message('Read log10 on L, then ln(x) = log10(x) × 2.303 = ' + crnu(result, 5)); }, delay: delayMsg });
       currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
@@ -346,6 +416,8 @@
     var isFirstInit = true;
     var divisionChain = isDivisionChain(ops);
     var divisionIndexInChain = 0;
+    var chainSlideShift = null;
+    var cursorAtIndex = false;
     for (var i = 0; i < ops.length; i++) {
       var op = ops[i];
       if (op.op === 'init') {
@@ -366,8 +438,12 @@
         // Second and later inits (e.g. 3.5 in 2*3.5) are second factors; no steps here.
       } else if (op.op === '*') stepMultiply(op);
       else if (op.op === '/') {
-        stepDivide(op, divisionChain ? divisionIndexInChain : -1, divisionChain);
-        if (divisionChain) divisionIndexInChain += 1;
+        var out = stepDivide(op, divisionChain ? divisionIndexInChain : -1, divisionChain, chainSlideShift, cursorAtIndex);
+        if (divisionChain) {
+          divisionIndexInChain += 1;
+          if (out && out.slideShift != null) chainSlideShift = out.slideShift;
+          if (out && typeof out.cursorAtIndex === 'boolean') cursorAtIndex = out.cursorAtIndex;
+        }
       }
       else if (op.op === '^') stepPower(op);
       else if (op.op === 'sqrt') stepSqrt(op);
@@ -384,7 +460,7 @@
     steps.unshift({ action: function () { message('Resetting slide rule to index (1 on C and D).'); }, delay: 100 });
     steps.push({ action: function () {
       if (sidesUsed.front) ensureSide(['C', 'D']);
-      if (sidesUsed.back && !sidesUsed.front) ensureSide(['S', 'C']);
+      if (sidesUsed.back && !sidesUsed.front) ensureSide(['S', 'D']);
       isolate();
       dimmm(80, 255, 8);
       sliderules.objective = function () {
