@@ -179,6 +179,19 @@ var isolate = function (scales) {
   }
   sliderules . requireRedraw = true;
 };
+
+var undimScales = function (scaleNames) {
+  if (!scaleNames || scaleNames . length === 0) return;
+  for (var ss in sliderules . sliderules) {
+    for (var r in sliderules . sliderules [ss] . rules) {
+      for (var s in sliderules . sliderules [ss] . rules [r] . scales) {
+        var scale = sliderules . sliderules [ss] . rules [r] . scales [s];
+        if (scaleNames . indexOf (scale . left) >= 0) delete scale . dimm;
+      }
+    }
+  }
+  sliderules . requireRedraw = true;
+};
 var intensify_colour = function (colour, intensity) {
   if (colour == 'black') colour = '#000000';
   if (colour == 'red') colour = '#ff0000';
