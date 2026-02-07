@@ -36,6 +36,22 @@
     <input type = radio name = other_side id=visible_back onclick="javascript: changeSide ('back');"/>Back
     <input type = radio name = other_side id=visible_both onclick="javascript: changeSide ('both');"/>Both sides
 	<input type = checkbox id = short_long onchange = "javascript: changeSize (this . checked ? 900 : 1200);" />Short/Long
+  <br/>
+  <label for="equation_input">Equation (no + or -):</label>
+  <input type="text" id="equation_input" placeholder="e.g. 2.5 * 3 / 1.5 or sqrt(16)" style="width: 280px;" />
+  <input type="button" value="Generate tutorial" onclick="javascript: onGenerateDynamicTutorial();" />
+  <input type="button" value="Replay" onclick="javascript: onReplayDynamicTutorial();" />
+  <div id="equation_error" style="color: red; font-size: 12px; margin-top: 2px;"></div>
+  <div id="equation_problem_area" style="margin-top: 2px; font-family: monospace;"></div>
+  <br/>
+  <select id = lessons><option value = "Choose Lesson ====" >Choose Lesson ====</option></select>
+  <input type = button value = "Play lesson" onclick = "javascript: playLesson ('lessons');" />&nbsp;&nbsp;&nbsp;
+  <select id = tests><option value = "Choose Test of Merit ====" >Choose Test of Merit ====</option></select>
+  <input type = button value = "Attempt test" onclick = "javascript: playLesson ('tests');" />&nbsp;&nbsp;&nbsp;
+  <input type = button id = clear_instructions onclick = "javascript: document . getElementById ('info') . innerHTML = '';" value = "Clear instructions." />
+  <div style = "display: block; position: fixed; background-color: white; border-color: black; border-style: solid; border-width: 1px;">
+    <font color = red ><span id = info /></font>
+  </div>
 </div>
 <div id="root"></div>
 
@@ -142,17 +158,108 @@ r . markings . push (new Engraving ('Cos', '12px arial', 'right', 'green', -0.03
 r . scales . push (new scale_TCTdec (24, {left: 'T', la: 'right', ls: 0.02, left_extension: 0.005}));
 r . scales . push (new scale_STCTdec (24, {left: 'SRT', la: 'right', ls: 0.02, right_extension: 0.002}));
 r . scales . push (new scale_SCdec (24, {left: 'S', la: 'right', ls: 0.02, alt: 'green', left_extension: 0.005}));
-r . scales . push (new scale_C (24, {left: 'X        C', la: 'right', ls: 0.02, indices: [1, 1, 1, 1]}));
+r . scales . push (new scale_C (24, {left: 'C', la: 'right', ls: 0.02, indices: [1, 1, 1, 1]}));
 r = new Rule ({rule_colour: 'ivory', left_margin: 0.15, right_margin: 0.15}); s . rules . push (r);
 r . markings . push (new Engraving ('JAPAN', '14px arial', 'center', 'black', 1.05, 20));
 r . markings . push (new Engraving ('1.0 \u2192 10.0', '12px arial', 'center', 'black', 1.053, 42));
 r . markings . push (new Engraving ('0.1 \u2192 1.0', '12px arial', 'center', 'black', 1.05, 66));
 r . markings . push (new Engraving ('0.01 \u2192 0.1', '12px arial', 'center', 'black', 1.048, 90));
-r . scales . push (new scale_D (24, {left: 'X        D', la: 'right', ls: 0.02, indices: [1, 1, 1, 1]}));
+r . scales . push (new scale_D (24, {left: 'D', la: 'right', ls: 0.02, indices: [1, 1, 1, 1]}));
 r . scales . push (new scale_LL3_down (24, {left: 'LL3', la: 'right', ls: 0.02}));
 r . scales . push (new scale_LL2_down (24, {left: 'e\u02e3   LL2', la: 'right', ls: 0.02, left_extension: 0.002}));
 r . scales . push (new scale_LL1_down (24, {left: 'LL1', la: 'right', ls: 0.02, left_extension: 0.005}));
 
+</script>
+
+<script src="sliderule_ctrl.js"></script>
+<script src="equation_parser.js"></script>
+<script src="dynamic_tutorial_hemmi.js"></script>
+<script>
+var lastDynamicSteps = null;
+function onGenerateDynamicTutorial () {
+  var input = document.getElementById('equation_input');
+  var errEl = document.getElementById('equation_error');
+  var areaEl = document.getElementById('equation_problem_area');
+  if (!input) return;
+  var eq = (input.value || '').trim();
+  errEl.innerHTML = '';
+  areaEl.innerHTML = '';
+  if (!eq) {
+    errEl.textContent = 'Enter an equation (e.g. 2*3/4 or sqrt(16)).';
+    return;
+  }
+  var parsed = equation_parser.parseEquation(eq);
+  if (parsed.error) {
+    errEl.textContent = parsed.message;
+    if (parsed.start != null && parsed.end != null && parsed.end > parsed.start) {
+      var before = eq.substring(0, parsed.start);
+      var problem = eq.substring(parsed.start, parsed.end);
+      var after = eq.substring(parsed.end);
+      areaEl.innerHTML = 'Problem area: ' + escapeHtml(before) + '<span style="background: #ffcccc; text-decoration: underline;">' + escapeHtml(problem) + '</span>' + escapeHtml(after);
+    }
+    return;
+  }
+  var messageFn = (function (infoEl) {
+    return function (msg) {
+      if (infoEl) infoEl.innerHTML += (msg || '') + '<br />';
+    };
+  })(document.getElementById('info'));
+  var result = window.generateDynamicTutorial(eq, messageFn);
+  if (result.error) {
+    errEl.textContent = result.message;
+    return;
+  }
+  lastDynamicSteps = result.steps;
+  document.getElementById('info').innerHTML = '';
+  playDynamicLesson(result.steps, 'info');
+}
+function onReplayDynamicTutorial () {
+  if (lastDynamicSteps && lastDynamicSteps.length) {
+    document.getElementById('info').innerHTML = '';
+    playDynamicLesson(lastDynamicSteps, 'info');
+  } else {
+    var errEl = document.getElementById('equation_error');
+    if (errEl) errEl.textContent = 'Generate a tutorial first.';
+  }
+}
+function escapeHtml (s) {
+  var div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+</script>
+<script src="manual/sliderule_tutorial_manual.js"></script>
+<script src="manual/sliderule_tutorial_multiplications.js"></script>
+<script src="manual/sliderule_tutorial_multiplications_folded.js"></script>
+<script src="manual/sliderule_tutorial_reciprocal.js"></script>
+<script src="manual/sliderule_tutorial_trigonometry_slide.js"></script>
+<script src="manual/sliderule_tutorial_tabling.js"></script>
+<script src="manual/sliderule_tutorial_astro.js"></script>
+<script src="manual/sliderule_test_manual.js"></script>
+<script src="manual/sliderule_test_multiplications.js"></script>
+<script src="manual/sliderule_test_reciprocal.js"></script>
+<script src="manual/sliderule_test_multiplications_folded.js"></script>
+<script src="manual/sliderule_test_trigonometry_slide.js"></script>
+<script src="manual/sliderule_test_tabling.js"></script>
+<script src="manual/sliderule_test_astro.js"></script>
+
+<script>
+readSlideruleLessons ('lessons', [userManual, multiplicationLessons, foldedMultiplicationLessons, reciprocalLessons, trigonometrySlideLessons, tablingLessons, astroLessons]);
+readSlideruleLessons ('tests', [userTrial, multiplicationTests, foldedMultiplicationTests, reciprocalTests, trigonometrySlideTests, tablingTests, astroTests]);
+// Hemmi Versalog II has no B scale (A/B pair) and no DI scale; lessons/tests that require them are excluded from the dropdowns.
+var hemmiExcludedLessons = ['Moving Slide', 'Moving Slide by right-click', 'Simple multiplication (A/B)', 'Simple division (A/B)', 'Calculate c and \u03b1 using slide'];
+var hemmiExcludedTests = ['Moving slide test', 'Right-click slide test', 'Simple multiplication test (A/B)', 'Simple division test (A/B)', 'Calculate c and \u03b1 using slide test'];
+function filterHemmiLessonOptions (selectId, excluded) {
+  var sel = document.getElementById(selectId);
+  if (!sel) return;
+  var i = sel.options.length - 1;
+  while (i >= 1) {
+    if (excluded.indexOf(sel.options[i].text) >= 0) sel.remove(i);
+    i--;
+  }
+}
+filterHemmiLessonOptions('lessons', hemmiExcludedLessons);
+filterHemmiLessonOptions('tests', hemmiExcludedTests);
 </script>
 
 <script src="sliderule_application.js"></script>

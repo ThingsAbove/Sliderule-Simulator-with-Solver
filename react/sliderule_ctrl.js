@@ -261,6 +261,7 @@ var cursorTo = function (name, value) {
           if (scale . left == name) {
             var target = scale . location (value) + rule . target;
             for (var tss in sliderules . sliderules) sliderules . sliderules [tss] . cursor_target = target;
+            sliderules . requireRedraw = true;
             return;
           }
         }
@@ -270,8 +271,11 @@ var cursorTo = function (name, value) {
 };
 
 var slideTo = function (name, value) {
-  for (var sr in sliderules . sliderules) {
-    var sliderule = sliderules . sliderules [sr];
+  var target;
+  var list = sliderules . sliderules;
+  // Prefer first sliderule (front) so C/D slide move targets the visible front face.
+  for (var sr = 0; sr < list . length; sr++) {
+    var sliderule = list [sr];
     if (! sliderule . inactive) {
       for (var r in sliderule . rules) {
         var rule = sliderule . rules [r];
@@ -279,12 +283,10 @@ var slideTo = function (name, value) {
           for (var s in rule . scales) {
             var scale = rule . scales [s];
             if (scale . left == name) {
-              var target = sliderule . cursor_target - scale . location (value);
-              for (var tss in sliderules . sliderules) {
-                for (var tr in sliderules . sliderules [tss] . rules) {
-                  if (sliderules . sliderules [tss] . rules [tr] . stator != 0) sliderules . sliderules [tss] . rules [tr] . target = target;
-                }
-              }
+              target = sliderule . cursor_target - scale . location (value);
+              rule . target = target;
+              slideToPosition (target);
+              sliderules . requireRedraw = true;
               return;
             }
           }
@@ -292,6 +294,37 @@ var slideTo = function (name, value) {
       }
     }
   }
+};
+
+var slideToPosition = function (position) {
+  for (var tss in sliderules . sliderules) {
+    for (var tr in sliderules . sliderules [tss] . rules) {
+      var rrule = sliderules . sliderules [tss] . rules [tr];
+      if (rrule . stator != 0) {
+        rrule . target = position;
+      }
+    }
+  }
+  sliderules . requireRedraw = true;
+};
+
+var getSlideTarget = function (name) {
+  var list = sliderules . sliderules;
+  for (var sr = 0; sr < list . length; sr++) {
+    var sliderule = list [sr];
+    if (! sliderule . inactive) {
+      for (var r in sliderule . rules) {
+        var rule = sliderule . rules [r];
+        if (rule . stator != 0) {
+          for (var s in rule . scales) {
+            var scale = rule . scales [s];
+            if (scale . left == name) return rule . target;
+          }
+        }
+      }
+    }
+  }
+  return null;
 };
 
 var readValue = function (name) {
@@ -315,7 +348,7 @@ var readValue = function (name) {
 var readLocation = function (name, value) {
   for (var sr in sliderules . sliderules) {
     var sliderule = sliderules . sliderules [sr];
-    if (! sliderules . inactive) {
+    if (! sliderule . inactive) {
       for (var r in sliderule . rules) {
         var rule = sliderule . rules [r];
         for (var s in rule . scales) {
@@ -373,6 +406,14 @@ var playLesson = function (lessons, info) {
 		if (lesson != null) {sequencer (lesson (lessonMessage)); return;}
 	}
 	alert ("Scenario [" + lesson_id + "] not found.");
+};
+
+var playDynamicLesson = function (steps, info) {
+	clearTimeout (sequencerTimeout);
+	if (info == undefined) info = 'info';
+	var el = document . getElementById (info);
+	if (el) el . innerHTML = "";
+	if (steps && steps . length) sequencer (steps);
 };
 
 
