@@ -264,7 +264,17 @@
       exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp + (useRightIndex ? ' + 1 (index shift: slide left)' : '');
       var cIndex = useRightIndex ? 10 : 1;
       var rScaleReadRounded = afterRScaleSqrt ? formatSigFig(cursorCVal, PREC_FINAL) : null;
-      if (useCF) {
+      var useCI = resultWasOnD && !afterRScaleSqrt;
+      if (useCI) {
+        steps.push({ action: function () { undimScales(['C', 'D', 'CI']); changeMarkings('hairline', true); }, delay: 500 });
+        steps.push({ action: displayMessageWithExponent('First factor is already on D (under the cursor). Without moving the cursor, move the slide so ' + formatSigFig(cursorCVal, PREC) + ' on the CI scale is under the cursor. Read the product on D under the index.'), delay: delayMsg });
+        steps.push({ action: function () {
+          if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D', 'CI']) && typeof changeSide === 'function') changeSide('front');
+          ensureSide(['C', 'D', 'CI']);
+          slideTo('CI', cursorCVal);
+        }, delay: delayAction });
+        steps.push({ action: displayMessageWithExponent('Read intermediate result ' + prodMsg + ' on D.'), delay: delayMsg });
+      } else if (useCF) {
         steps.push({ action: function () { undimScales(['CF', 'DF']); changeMarkings('hairline', true); }, delay: 500 });
         steps.push({ action: displayMessageWithExponent('Second factor ' + formatSigFig(cursorCVal, PREC) + ' would be off C; use folded scales. Set cursor to ' + formatSigFig(firstFactor, PREC) + ' on DF, align index on CF, then cursor to ' + formatSigFig(cursorCVal, PREC) + ' on CF and read product on DF.'), delay: delayMsg });
         steps.push({ action: function () {
@@ -623,35 +633,54 @@
       }
     }
 
+    var S_SCALE_MIN_DEG = 5.73;
     function stepSin(op) {
       var arg = op.arg;
       var result = op.result;
       ensureBack();
-      steps.push({ action: function () { ensureSide(['S', 'D']); sidesUsed.back = true; }, delay: 100 });
-      steps.push({ action: function () { undimScales(['S', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-      steps.push({ action: displayMessageWithExponent('Sine of ' + formatSigFig(arg, PREC) + ' degrees: cursor to angle on S, read value on D.'), delay: delayMsg });
-      steps.push({ action: function () { cursorTo('S', arg); }, delay: delayAction });
+      var useST = arg < S_SCALE_MIN_DEG;
+      var scaleNames = useST ? ['SRT', 'D'] : ['S', 'D'];
+      steps.push({ action: function () { ensureSide(scaleNames); sidesUsed.back = true; }, delay: 100 });
+      steps.push({ action: function () { undimScales(scaleNames); changeMarkings('hairline', true); }, delay: 500 });
+      if (useST) {
+        steps.push({ action: displayMessageWithExponent('Angle ' + formatSigFig(arg, PREC) + '\u00b0 is below the S scale range (~5.7\u00b0). Use the ST scale: cursor to ' + formatSigFig(arg, PREC) + ' on ST, read on D (result 0.01\u20130.1).'), delay: delayMsg });
+        steps.push({ action: function () { cursorTo('SRT', arg); }, delay: delayAction });
+      } else {
+        steps.push({ action: displayMessageWithExponent('Sine of ' + formatSigFig(arg, PREC) + ' degrees: cursor to angle on S, read value on D.'), delay: delayMsg });
+        steps.push({ action: function () { cursorTo('S', arg); }, delay: delayAction });
+      }
       steps.push({ action: displayMessageWithExponent('Read sin = ' + formatSigFig(result, PREC_FINAL) + ' on D (adjust decimal).'), delay: delayMsg });
-      currentMantissa = result >= 1 && result < 10 ? result : (result * 10);
-      if (currentMantissa >= 10) currentMantissa /= 10;
+      currentMantissa = result;
+      while (currentMantissa > 0 && currentMantissa < 1) currentMantissa *= 10;
+      while (currentMantissa >= 10) currentMantissa /= 10;
       currentExp = result !== 0 && isFinite(result) ? Math.floor(Math.log10(Math.abs(result))) : 0;
       exponentLogReason = 'sin: result exponent';
       lastWasBack = true;
-      lastResultOnD = false;
+      lastResultOnD = true;
     }
 
     function stepCos(op) {
       var arg = op.arg;
       var result = op.result;
+      var comp = 90 - arg;
       ensureBack();
-      steps.push({ action: function () { ensureSide(['S', 'D']); sidesUsed.back = true; }, delay: 100 });
-      steps.push({ action: function () { undimScales(['S', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-      steps.push({ action: displayMessageWithExponent('Cosine of ' + formatSigFig(arg, PREC) + ' degrees: cos(θ) = sin(90−θ). Cursor to ' + formatSigFig(90 - arg, PREC) + ' on S, read on D.'), delay: delayMsg });
-      steps.push({ action: function () { cursorTo('S', 90 - arg); }, delay: delayAction });
+      var useST = comp < S_SCALE_MIN_DEG;
+      var scaleNames = useST ? ['SRT', 'D'] : ['S', 'D'];
+      steps.push({ action: function () { ensureSide(scaleNames); sidesUsed.back = true; }, delay: 100 });
+      steps.push({ action: function () { undimScales(scaleNames); changeMarkings('hairline', true); }, delay: 500 });
+      if (useST) {
+        steps.push({ action: displayMessageWithExponent('cos(θ) = sin(90−θ). Angle 90−' + formatSigFig(arg, PREC) + '\u00b0 = ' + formatSigFig(comp, PREC) + '\u00b0 is below S scale range. Use ST: cursor to ' + formatSigFig(comp, PREC) + ' on ST, read on D.'), delay: delayMsg });
+        steps.push({ action: function () { cursorTo('SRT', comp); }, delay: delayAction });
+      } else {
+        steps.push({ action: displayMessageWithExponent('Cosine of ' + formatSigFig(arg, PREC) + ' degrees: cos(θ) = sin(90−θ). Cursor to ' + formatSigFig(comp, PREC) + ' on S, read on D.'), delay: delayMsg });
+        steps.push({ action: function () { cursorTo('S', comp); }, delay: delayAction });
+      }
       steps.push({ action: displayMessageWithExponent('Read cos = ' + formatSigFig(result, PREC_FINAL) + ' on D.'), delay: delayMsg });
-      currentMantissa = result >= 1 && result < 10 ? result : (result * 10);
-      if (currentMantissa >= 10) currentMantissa /= 10;
+      currentMantissa = result;
+      while (currentMantissa > 0 && currentMantissa < 1) currentMantissa *= 10;
+      while (currentMantissa >= 10) currentMantissa /= 10;
       lastWasBack = true;
+      lastResultOnD = true;
     }
 
     function stepTan(op) {
@@ -663,12 +692,13 @@
       steps.push({ action: displayMessageWithExponent('Tangent of ' + formatSigFig(arg, PREC) + ' degrees: cursor to angle on T, read on D.'), delay: delayMsg });
       steps.push({ action: function () { cursorTo('T', arg); }, delay: delayAction });
       steps.push({ action: displayMessageWithExponent('Read tan = ' + formatSigFig(result, PREC_FINAL) + ' on D.'), delay: delayMsg });
-      currentMantissa = result >= 1 && result < 10 ? result : (result * 10);
-      if (currentMantissa >= 10) currentMantissa /= 10;
+      currentMantissa = result;
+      while (currentMantissa > 0 && currentMantissa < 1) currentMantissa *= 10;
+      while (currentMantissa >= 10) currentMantissa /= 10;
       currentExp = result !== 0 && isFinite(result) ? Math.floor(Math.log10(Math.abs(result))) : 0;
       exponentLogReason = 'tan: result exponent';
       lastWasBack = true;
-      lastResultOnD = false;
+      lastResultOnD = true;
     }
 
     function stepLog(op) {
