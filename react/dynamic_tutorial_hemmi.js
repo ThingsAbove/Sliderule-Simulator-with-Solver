@@ -571,16 +571,37 @@
     function stepLn(op) {
       var arg = op.arg;
       var result = op.result;
-      ensureBack();
-      steps.push({ action: function () { ensureSide(['LogX     L', 'D']); sidesUsed.back = true; }, delay: 100 });
-      steps.push({ action: function () { undimScales(['LogX     L', 'D']); changeMarkings('hairline', true); }, delay: 500 });
       var manArg = toMantissa(arg);
-      steps.push({ action: function () { message('Natural log of ' + crnu(arg, 5) + ': cursor to value on D, read log10 on L. Then ln(x) = log10(x) × 2.303.'); }, delay: delayMsg });
-      steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
-      steps.push({ action: function () { message('Read log10 on L, then ln(x) = log10(x) × 2.303 = ' + crnu(result, 5)); }, delay: delayMsg });
-      currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
-      lastWasBack = true;
-      lastResultOnD = false;
+      var llScaleLabel = llScaleForValue(arg);
+      var llScaleName = findLLScaleNameForValue(arg);
+      if (llScaleLabel && llScaleName) {
+        ensureBack();
+        steps.push({ action: function () { ensureSide([llScaleName, 'D']); sidesUsed.back = true; }, delay: 100 });
+        steps.push({ action: function () { undimScales([llScaleName, 'D']); changeMarkings('hairline', true); }, delay: 500 });
+        var resultRead = (result >= 1 && result < 10) ? crnu(result, 3) : (result >= 0.1 && result < 1 ? crnu(result, 3) : (result >= 0.01 && result < 0.1 ? crnu(result, 4) : Number(result).toPrecision(3)));
+        var rangeHint = (llScaleLabel === 'LL3') ? '1.0 to 10.0' : (llScaleLabel === 'LL2') ? '0.1 to 1.0' : '0.01 to 0.1';
+        steps.push({ action: function () {
+          message('Natural log of ' + crnu(arg, 3) + ': On the Versalog II, the D scale and LL scales are aligned so ln(y) is read directly. Find ' + crnu(manArg.m, 3) + ' on the ' + llScaleLabel + ' scale.');
+        }, delay: delayMsg });
+        steps.push({ action: function () { cursorTo(llScaleName, manArg.m); }, delay: delayAction });
+        steps.push({ action: function () {
+          message('Place the hairline over ' + crnu(manArg.m, 3) + ' on ' + llScaleLabel + '. Read the digits under the cursor on the D scale. ' + llScaleLabel + ' gives ln between ' + rangeHint + ', so ln(' + crnu(arg, 3) + ') = ' + resultRead + '.');
+        }, delay: delayMsg });
+        currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
+        if (currentMantissa >= 10) currentMantissa /= 10;
+        lastWasBack = true;
+        lastResultOnD = true;
+      } else {
+        ensureBack();
+        steps.push({ action: function () { ensureSide(['LogX     L', 'D']); sidesUsed.back = true; }, delay: 100 });
+        steps.push({ action: function () { undimScales(['LogX     L', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+        steps.push({ action: function () { message('Natural log of ' + crnu(arg, 5) + ': cursor to value on D, read log10 on L. Then ln(x) = log10(x) × 2.303.'); }, delay: delayMsg });
+        steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
+        steps.push({ action: function () { message('Read log10 on L, then ln(x) = log10(x) × 2.303 = ' + crnu(result, 5)); }, delay: delayMsg });
+        currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
+        lastWasBack = true;
+        lastResultOnD = false;
+      }
     }
 
     var isFirstInit = true;
