@@ -1,0 +1,11 @@
+{
+  "name": "sliderule-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:position": "node react/test_sliderule_position.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}
