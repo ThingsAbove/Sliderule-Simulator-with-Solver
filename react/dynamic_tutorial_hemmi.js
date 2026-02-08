@@ -60,6 +60,7 @@
     var sidesUsed = { front: false, back: false };
     var lastWasBack = false;
     var lastResultOnD = true;
+    var lastWasFinalSqrt = false;
 
     // ——— Rule book: body limits, scale positions, division/mult and index choice ———
     var limitL = 0.03;
@@ -86,6 +87,14 @@
       if (x <= 0) return 'left';
       var e = Math.floor(Math.log10(x));
       return (e % 2 === 0) ? 'left' : 'right';
+    }
+    /** Number of digits to the left of the decimal (for R1 vs R2: odd → R1, even → R2). */
+    function digitsLeftOfDecimal(x) {
+      if (x <= 0 || !isFinite(x)) return 0;
+      x = Math.abs(x);
+      var intPart = Math.floor(x);
+      if (intPart === 0) return 0;
+      return Math.floor(Math.log10(intPart)) + 1;
     }
     function cubeRootThird(x) {
       if (x <= 0) return 0;
@@ -502,21 +511,39 @@
       }
     }
 
-    function stepSqrt(op) {
+    function stepSqrt(op, isFinalOp) {
       var arg = op.arg;
       var result = op.result;
       var manArg = toMantissa(arg);
       var manResult = toMantissa(result);
       currentMantissa = manResult.m;
-      ensureFront();
-      var half = squareRootHalf(arg);
-      var aVal = half === 'left' ? manArg.m : manArg.m * 10;
-      steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
-      steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-      steps.push({ action: function () { message('Square root of ' + crnu(arg, 5) + ': use ' + half + ' half of A. Cursor to value on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
-      steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
-      steps.push({ action: function () { message('Result ' + crnu(result, 5) + ' on D scale.'); }, delay: delayMsg });
-      lastResultOnD = true;
+      if (isFinalOp) {
+        ensureBack();
+        var nDigits = digitsLeftOfDecimal(arg);
+        var useR1 = (nDigits % 2 === 1);
+        var rScale = useR1 ? 'R1' : 'R2';
+        var rHint = useR1 ? 'Odd number of digits to the left of the decimal → use R1.' : 'Even number of digits to the left of the decimal → use R2.';
+        steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.back = true; }, delay: 100 });
+        steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+        steps.push({ action: function () {
+          message('Square root of ' + crnu(arg, 5) + ' (final result): use the R scales for higher precision. Set the cursor on ' + crnu(manArg.m, 5) + ' on the D scale and read the result on ' + rScale + '. ' + rHint);
+        }, delay: delayMsg });
+        steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
+        steps.push({ action: function () { message('Result ' + crnu(result, 5) + ' on ' + rScale + ' scale.'); }, delay: delayMsg });
+        lastResultOnD = false;
+        lastWasBack = true;
+        lastWasFinalSqrt = true;
+      } else {
+        ensureFront();
+        var half = squareRootHalf(arg);
+        var aVal = half === 'left' ? manArg.m : manArg.m * 10;
+        steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
+        steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+        steps.push({ action: function () { message('Square root of ' + crnu(arg, 5) + ': use ' + half + ' half of A. Cursor to value on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+        steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
+        steps.push({ action: function () { message('Result ' + crnu(result, 5) + ' on D scale.'); }, delay: delayMsg });
+        lastResultOnD = true;
+      }
     }
 
     function stepSin(op) {
@@ -665,7 +692,7 @@
         }
       }
       else if (op.op === '^') stepPower(op);
-      else if (op.op === 'sqrt') stepSqrt(op);
+      else if (op.op === 'sqrt') stepSqrt(op, i === ops.length - 1);
       else if (op.op === 'sin') stepSin(op);
       else if (op.op === 'cos') stepCos(op);
       else if (op.op === 'tan') stepTan(op);
@@ -678,7 +705,8 @@
     steps.unshift({ action: function () { ensureSide(['C', 'D']); cursorTo('D', 1); slideTo('C', 1); }, delay: 0 });
     steps.unshift({ action: function () { message('Resetting slide rule to index (1 on C and D).'); }, delay: 100 });
     steps.push({ action: function () {
-      if (lastWasBack) ensureSide(['S', 'D']);
+      if (lastWasFinalSqrt) ensureSide(['R1', 'R2', 'D']);
+      else if (lastWasBack) ensureSide(['S', 'D']);
       else ensureSide(['C', 'D']);
       isolate();
       sliderules.objective = function () {
