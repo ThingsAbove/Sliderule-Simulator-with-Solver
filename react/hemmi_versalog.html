@@ -1,4 +1,3 @@
-<meta charset="UTF-8"/>
 <!--
 ///////////////////////////////////////////////////////////////////////////////////
 //                     Copyright (C) 2017 Dr Robert P. Wolf                      //
@@ -25,19 +24,102 @@
 -->
 <html>
   <head>
+    <meta charset="UTF-8"/>
     <title>Hemmi/Post 1460 Versalog</title>
     <link rel="shortcut icon" type="image/x-icon" href="../h.ico"/>
+    <style>
+      .header { max-height: 150px; overflow-y: auto; overflow-x: hidden; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.4rem; padding: 0.35rem 0.6rem; background: linear-gradient(to bottom, #f8f9fa, #e9ecef); border-bottom: 1px solid #dee2e6; border-radius: 0 0 6px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif; font-size: 12px; }
+      .header .row1 { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; width: 100%; }
+      .header section { background: #fff; border: 1px solid #dee2e6; border-radius: 4px; padding: 0.25rem 0.4rem; min-width: 0; }
+      .header section h3 { margin: 0 0 0.2rem 0; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #495057; }
+      .header .markings label, .header .display label, .header .size label { display: inline-flex; align-items: center; gap: 0.2rem; margin-right: 0.4rem; cursor: pointer; white-space: nowrap; font-size: 11px; }
+      .header .display label { margin-right: 0.25rem; }
+      .header .dynamic { flex: 1; min-width: 200px; max-width: 360px; }
+      .header .dynamic .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-bottom: 0; }
+      .header .dynamic input[type="text"] { flex: 1; min-width: 120px; padding: 0.25rem 0.35rem; border: 1px solid #adb5bd; border-radius: 3px; font-size: 12px; }
+      .header .dynamic input[type="text"]:focus { outline: none; border-color: #2E5894; box-shadow: 0 0 0 1px rgba(46,88,148,0.2); }
+      .header .dynamic .btn { padding: 0.25rem 0.5rem; border: 1px solid #ced4da; border-radius: 3px; background: #fff; font-size: 11px; cursor: pointer; }
+      .header .dynamic .btn:hover { background: #e9ecef; border-color: #adb5bd; }
+      .header .dynamic .btn-primary { background: #2E5894; color: #fff; border-color: #2E5894; }
+      .header .dynamic .btn-primary:hover { background: #244a7a; }
+      .header .dynamic .help { margin-top: 0.2rem; }
+      .header .dynamic .help summary { cursor: pointer; color: #495057; font-size: 11px; }
+      .header .dynamic .help-content { margin-top: 0.2rem; padding: 0.35rem; background: #f1f3f5; border-radius: 3px; font-size: 11px; color: #495057; line-height: 1.4; }
+      .header .dynamic .help-content code { background: #dee2e6; padding: 0.05rem 0.15rem; border-radius: 2px; font-size: 10px; }
+      #equation_error { color: #c92a2a; font-size: 11px; margin-top: 0.15rem; min-height: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #equation_problem_area { margin-top: 0.1rem; font-family: ui-monospace, monospace; font-size: 11px; min-height: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .header .static { min-width: 200px; }
+      .header .static .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-bottom: 0.2rem; }
+      .header .static .row:last-child { margin-bottom: 0; }
+      .header .static select { padding: 0.25rem 0.35rem; border: 1px solid #adb5bd; border-radius: 3px; font-size: 11px; min-width: 140px; max-width: 180px; background: #fff; }
+      .header .static .btn { padding: 0.25rem 0.4rem; border: 1px solid #ced4da; border-radius: 3px; background: #fff; font-size: 11px; cursor: pointer; }
+      .header .static .btn:hover { background: #e9ecef; }
+      .info-panel { position: fixed; top: 151px; left: 12px; z-index: 10; background: #fff; border: 1px solid #dee2e6; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 0.5rem 0.75rem; font-size: 13px; color: #c92a2a; max-width: 40%; }
+      .info-panel span { display: block; }
+    </style>
   </head>
 <body onkeydown = "javascript: ProcessKey (event);">
-<div>
-	<input type = checkbox id = on_side onchange = "javascript: changeMarkings ('stator', this . checked);" />Markings on side.
-	<input type = checkbox id = on_hairline onchange = "javascript: changeMarkings ('hairline', this . checked);" />Markings on centre hairline.
-    <input type = radio name = other_side id=visible_front onclick="javascript: changeSide ('front');" checked=true/>Front
-    <input type = radio name = other_side id=visible_back onclick="javascript: changeSide ('back');"/>Back
-    <input type = radio name = other_side id=visible_both onclick="javascript: changeSide ('both');"/>Both sides
-	<input type = checkbox id = short_long onchange = "javascript: changeSize (this . checked ? 900 : 1200);" />Short/Long
-</div>
-<div id="root"></div>
+<header class="header">
+  <div class="row1">
+    <section class="markings">
+      <h3>Markings</h3>
+      <label><input type="checkbox" id="on_side" onchange="javascript: changeMarkings('stator', this.checked);"/> side</label>
+      <label><input type="checkbox" id="on_hairline" onchange="javascript: changeMarkings('hairline', this.checked);"/> hairline</label>
+    </section>
+    <section class="display">
+      <h3>Display</h3>
+      <label><input type="radio" name="other_side" id="visible_front" onclick="javascript: changeSide('front');" checked="true"/> Front</label>
+      <label><input type="radio" name="other_side" id="visible_back" onclick="javascript: changeSide('back');"/> Back</label>
+      <label><input type="radio" name="other_side" id="visible_both" onclick="javascript: changeSide('both');"/> Both</label>
+    </section>
+    <section class="size">
+      <h3>Size</h3>
+      <label><input type="checkbox" id="short_long" onchange="javascript: changeSize(this.checked ? 900 : 1200);"/> Short</label>
+    </section>
+    <section class="dynamic">
+      <h3>Equation</h3>
+      <div class="row">
+        <input type="text" id="equation_input" placeholder="e.g. 2.5*3/1.5 or sqrt(16)" />
+        <button type="button" class="btn btn-primary" onclick="javascript: onGenerateDynamicTutorial();">Generate</button>
+        <button type="button" class="btn" onclick="javascript: onReplayDynamicTutorial();">Replay</button>
+      </div>
+      <div class="row step-controls" style="margin-top: 0.35rem;">
+        <button type="button" class="btn" id="tutorial_prev" title="Previous step" onclick="javascript: onTutorialStepBack();">&#9664; Prev</button>
+        <button type="button" class="btn" id="tutorial_next" title="Next step" onclick="javascript: onTutorialStepForward();">Next &#9654;</button>
+        <button type="button" class="btn" id="tutorial_play" title="Play" onclick="javascript: onTutorialPlay();">Play</button>
+        <button type="button" class="btn" id="tutorial_pause" title="Pause" onclick="javascript: onTutorialPause();">Pause</button>
+        <span class="step-counter" id="tutorial_step_counter" style="font-size: 11px; color: #495057; align-self: center;">Step 0 of 0</span>
+      </div>
+      <div id="equation_error"></div>
+      <div id="equation_problem_area"></div>
+      <details class="help">
+        <summary>Format help</summary>
+        <div class="help-content">
+          Use <code>*</code> <code>/</code> <code>^</code> only (no + or −). Numbers and spaces allowed.<br/>
+          Functions: <code>sqrt(x)</code> <code>sin(x)</code> <code>cos(x)</code> <code>tan(x)</code> <code>log(x)</code> <code>ln(x)</code> — angles in degrees.<br/>
+          Examples: <code>2*3/4</code> <code>sqrt(6)*3</code> <code>log(sqrt(4))*2.22</code> <code>sin(30)*2</code>
+        </div>
+      </details>
+    </section>
+    <section class="static">
+      <h3>Lessons</h3>
+      <div class="row">
+        <select id="lessons"><option value="Choose Lesson ====">Choose Lesson ====</option></select>
+        <button type="button" class="btn" onclick="javascript: playLesson('lessons');">Play</button>
+      </div>
+      <div class="row">
+        <select id="tests"><option value="Choose Test of Merit ====">Choose Test of Merit ====</option></select>
+        <button type="button" class="btn" onclick="javascript: playLesson('tests');">Attempt</button>
+      </div>
+      <div class="row">
+        <button type="button" class="btn" id="clear_instructions" onclick="javascript: document.getElementById('info').innerHTML='';">Clear</button>
+      </div>
+    </section>
+  </div>
+</header>
+<div class="info-panel"><span id="info"> 
+</span></div>
+<div id="root"><br></div>
 
 <script src="sliderule_construction_kit.js"></script>
 <script src="scales.js"></script>
@@ -72,21 +154,13 @@ s . braces . push (new Bolt (1.38, 290 - 24, 8,  '#2E5894', '#41a187'));
 var r = new Rule ({rule_colour: 'ivory', left_margin: 0.15, right_margin: 0.15}); s . rules . push (r);
 r . markings . push (new Engraving ('e\u02e3', '12px arial', 'right', 'black', -0.06, 18));
 r . markings . push (new Engraving ('e\u207b\u02e3', '12px arial', 'right', 'red', -0.06, 42));
-//r . markings . push (new Engraving ('X\u00b3', '12px arial', 'right', 'black', -0.06, 66));
-//r . markings . push (new Engraving ('\u03c0X', '12px arial', 'right', 'black', -0.06, 90));
 r . markings . push (new Engraving ('-0.001 \u2190 -0.01', '12px arial', 'center', 'red', 1.054, 42));
 r . markings . push (new Engraving ('0.001 \u2192 0.01', '12px arial', 'center', 'black', 1.054, 18));
-//r . markings . push (new Engraving ('VERSALOG', '14px arial', 'left', 'black', 1.02, 64));
-//r . markings . push (new Engraving ('1460', '14px arial', 'left', 'black', 1.03, 82));
 r . scales . push (new scale_LL0_down (24, {left: 'LL0', ls: 0.02, la: 'right'}));
 r . scales . push (new scale_LL00 (24, {left: 'LL/0', la: 'right', ls: 0.02, marking_colour: 'red', right_extension: 0.005}));
 r . scales . push (new scale_K (24, {left: 'K', ls: 0.02, la: 'right'}));
 r . scales . push (new scale_CF (24, {left: 'DF', ls: 0.02, la: 'right', right_extension: 0.001}));
 r = new Rule ({rule_colour: 'ivory', stator: 1}); s . rules . push (r);
-//r . markings . push (new Engraving ('\u03c0X', '12px arial', 'right', 'black', -0.06, 18));
-//r . markings . push (new Engraving ('1/\u03c0X', '12px arial', 'right', 'red', -0.06, 42));
-//r . markings . push (new Engraving ('1/X', '12px arial', 'right', 'red', -0.06, 66));
-//r . markings . push (new Engraving ('X', '12px arial', 'right', 'black', -0.06, 90));
 r . markings . push (new Engraving ('3.1', '12px arial', 'center', 'red', 1.012, 45));
 r . markings . push (new Logo (logo, 1.06, 48, 0.25));
 r . scales . push (new scale_DF (24, {left: 'CF', ls: 0.02, la: 'right', right_extension: 0.001}));
@@ -94,11 +168,6 @@ r . scales . push (new scale_DIF (24, {left: 'CIF', ls: 0.02, la: 'right', marki
 r . scales . push (new scale_CI (24, {left: 'CI', ls: 0.02, la: 'right', marking_colour: 'red', indices: [1, 1, 1, 1]}));
 r . scales . push (new scale_C (24, {left: 'C', ls: 0.02, la: 'right', draw_c: false, indices: [1, 1, 1, 1]}));
 r = new Rule ({rule_colour: 'ivory'}); s . rules . push (r);
-//r . markings . push (new Engraving ('X', '12px arial', 'right', 'black', -0.06, 18));
-//r . markings . push (new Engraving ('\u221aX', '12px arial', 'right', 'black', -0.06, 54));
-//r . markings . push (new Engraving ('e\u02e3', '12px arial', 'right', 'black', -0.06, 90));
-//r . markings . push (new Engraving ('FREDERICK', '14px arial', 'left', 'black', 1.01, 24));
-//r . markings . push (new Engraving ('POST', '14px arial', 'left', 'black', 1.016, 42));
 r . scales . push (new scale_D (24, {left: 'D', ls: 0.02, la: 'right', indices: [1, 1, 1, 1]}));
 r . scales . push (new scale_W1 (24, {left: 'R1', ls: 0.02, la: 'right', draw_c: false, draw_e: false, draw_pi: false, right_extension: 0.003}));
 r . scales . push (new scale_W2 (24, {left: 'R2', ls: 0.02, la: 'right', draw_c: false, draw_e: false, left_extension: 0.005}));
@@ -122,7 +191,6 @@ s . braces . push (new Screw (1.325, 312 - 38 - 24, 12, Math . random () * Math 
 s . braces . push (new Bolt (1.32, 312 - 250, 8,  '#2E5894', '#41a187'));
 s . braces . push (new Bolt (1.38, 312 - 290, 8,  '#2E5894', '#41a187'));
 r = new Rule ({rule_colour: 'ivory'}); s . rules . push (r);
-//r . markings . push (new Engraving ('HEMMI', '14px arial', 'center', 'black', 1.05, 20));
 r . markings . push (new Engraving ('-0.01 \u2190 -0.1', '12px arial', 'center', 'red', 1.048, 42));
 r . markings . push (new Engraving ('-0.1 \u2190 -1.0', '12px arial', 'center', 'red', 1.05, 66));
 r . markings . push (new Engraving ('-1.0 \u2190 -10.0', '12px arial', 'center', 'red', 1.053, 90));
@@ -131,11 +199,6 @@ r . scales . push (new scale_LL01 (24, {left: 'LL/1', la: 'right', ls: 0.02, mar
 r . scales . push (new scale_LL02 (24, {left: 'e\u207b\u02e3   LL/2', la: 'right', ls: 0.02, marking_colour: 'red', left_extension: 0.001}));
 r . scales . push (new scale_LL03 (24, {left: 'LL/3', la: 'right', ls: 0.02, marking_colour: 'red'}));
 r = new Rule ({rule_colour: 'ivory', stator: 1}); s . rules . push (r);
-//r . markings . push (new Engraving ('0.1 \u2192 1.0', '12px arial', 'center', 'black', 1.05, 12));
-//r . markings . push (new Engraving ('10.0 \u2190 1.0', '12px arial', 'center', 'red', 1.047, 24));
-//r . markings . push (new Engraving ('0.01 \u2192 0.1', '12px arial', 'center', 'black', 1.048, 36));
-//r . markings . push (new Engraving ('100.0 \u2190 10.0', '12px arial', 'center', 'red', 1.048, 48));
-//r . markings . push (new Engraving ('0.1 \u21c4 1.0', '12px arial', 'center', 'black', 1.05, 60));
 r . markings . push (new Engraving ('T', '12px arial', 'right', 'red', -0.03, 18));
 r . markings . push (new Engraving ('SecT', '12px arial', 'right', 'red', -0.045, 42));
 r . markings . push (new Engraving ('Cos', '12px arial', 'right', 'green', -0.03, 66));
@@ -145,7 +208,6 @@ r . scales . push (new scale_STCTdec (24, {left: 'SRT', la: 'right', ls: 0.02, r
 r . scales . push (new scale_SCdec (24, {left: 'S', la: 'right', ls: 0.02, alt: 'green', left_extension: 0.005}));
 r . scales . push (new scale_C (24, {left: 'X        C', la: 'right', ls: 0.02, indices: [1, 1, 1, 1]}));
 r = new Rule ({rule_colour: 'ivory', left_margin: 0.15, right_margin: 0.15}); s . rules . push (r);
-//r . markings . push (new Engraving ('JAPAN', '14px arial', 'center', 'black', 1.05, 20));
 r . markings . push (new Engraving ('1.0 \u2192 10.0', '12px arial', 'center', 'black', 1.053, 42));
 r . markings . push (new Engraving ('0.1 \u2192 1.0', '12px arial', 'center', 'black', 1.05, 66));
 r . markings . push (new Engraving ('0.01 \u2192 0.1', '12px arial', 'center', 'black', 1.048, 90));
@@ -156,6 +218,45 @@ r . scales . push (new scale_LL1_down (24, {left: 'LL1', la: 'right', ls: 0.02, 
 
 </script>
 
+<script src="sliderule_ctrl.js"></script>
+<script src="hemmi_versalog_profiles.js"></script>
+<script>window.hemmiRuleProfile = window.hemmiRuleProfiles.versalog;</script>
+<script src="equation_parser.js"></script>
+<script src="dynamic_tutorial_hemmi.js"></script>
+<script src="hemmi_tutorial_ui.js"></script>
+<script src="manual/sliderule_tutorial_manual.js"></script>
+<script src="manual/sliderule_tutorial_multiplications.js"></script>
+<script src="manual/sliderule_tutorial_multiplications_folded.js"></script>
+<script src="manual/sliderule_tutorial_reciprocal.js"></script>
+<script src="manual/sliderule_tutorial_trigonometry_slide.js"></script>
+<script src="manual/sliderule_tutorial_tabling.js"></script>
+<script src="manual/sliderule_tutorial_astro.js"></script>
+<script src="manual/sliderule_test_manual.js"></script>
+<script src="manual/sliderule_test_multiplications.js"></script>
+<script src="manual/sliderule_test_reciprocal.js"></script>
+<script src="manual/sliderule_test_multiplications_folded.js"></script>
+<script src="manual/sliderule_test_trigonometry_slide.js"></script>
+<script src="manual/sliderule_test_tabling.js"></script>
+<script src="manual/sliderule_test_astro.js"></script>
+
+<script>
+readSlideruleLessons ('lessons', [userManual, multiplicationLessons, foldedMultiplicationLessons, reciprocalLessons, trigonometrySlideLessons, tablingLessons, astroLessons]);
+readSlideruleLessons ('tests', [userTrial, multiplicationTests, foldedMultiplicationTests, reciprocalTests, trigonometrySlideTests, tablingTests, astroTests]);
+var hemmiExcludedLessons = ['Moving Slide', 'Moving Slide by right-click', 'Simple multiplication (A/B)', 'Simple division (A/B)', 'Calculate c and \u03b1 using slide'];
+var hemmiExcludedTests = ['Moving slide test', 'Right-click slide test', 'Simple multiplication test (A/B)', 'Simple division test (A/B)', 'Calculate c and \u03b1 using slide test'];
+function filterHemmiLessonOptions (selectId, excluded) {
+  var sel = document.getElementById(selectId);
+  if (!sel) return;
+  var i = sel.options.length - 1;
+  while (i >= 1) {
+    if (excluded.indexOf(sel.options[i].text) >= 0) sel.remove(i);
+    i--;
+  }
+}
+filterHemmiLessonOptions('lessons', hemmiExcludedLessons);
+filterHemmiLessonOptions('tests', hemmiExcludedTests);
+</script>
+
 <script>window.slideruleInitialPositionAtBottom = true;</script>
 <script src="sliderule_application.js"></script>
 
@@ -163,9 +264,7 @@ r . scales . push (new scale_LL1_down (24, {left: 'LL1', la: 'right', ls: 0.02, 
 <script>
 changeMarkings ('stator', document . getElementById ('on_side') . checked);
 changeMarkings ('hairline', document . getElementById ('on_hairline') . checked);
-//changeMarkings ('hairlines', document . getElementById ('on_extras') . checked);
 changeSide (document . getElementById ('visible_front') . checked ? 'front': document . getElementById ('visible_back') . checked ? 'back' : 'both');
-//changeVersion (document . getElementById ('version') . checked ? 'us' : 'german');
 changeSize (document . getElementById ('short_long') . checked ? 900 : 1200);
 </script>
 
