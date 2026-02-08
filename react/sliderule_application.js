@@ -216,18 +216,11 @@ rootRootDiv . appendChild (slideruleCanvas);
 var ctx = slideruleCanvas . getContext ('2d');
 
 var previous_width = 0, previous_height = 0;
-var first = true;
 var drawSliderule = function () {
-	if (first)
-		first = false;
-	else
-		return;
-
 	var width = window . innerWidth, height = window . innerHeight;
 	var bound = slideruleCanvas . getBoundingClientRect ();
 	var new_width = width - bound . left * 4, new_height = height - bound . top * 1.5;
 	if (sliderules . fixedHeight) new_height = sliderules . fixedHeight;
-//	console . log (width, height, new_width, new_height, bound);
 	if (previous_width !== new_width || previous_height !== new_height) {
 		slideruleCanvas . width = new_width;
 		slideruleCanvas . height = new_height;
@@ -241,20 +234,15 @@ var drawSliderule = function () {
 	}
 	sliderules . checkRequired = true;
 
-	ctx.clearRect(0, 0, new_width, new_height) ;
-	var c2s = new C2S(new_width, new_height);
-	var svg = document.getElementById("svg");
-
-	if (svg.children.length > 0) {
-		svg.removeChild(svg.children[0]);
+	ctx.clearRect(0, 0, new_width, new_height);
+	var svg = document . getElementById ("svg");
+	if (typeof C2S !== 'undefined' && svg) {
+		var c2s = new C2S (new_width, new_height);
+		if (svg . children . length > 0) svg . removeChild (svg . children [0]);
+		sliderules . draw (c2s, new_width, new_height);
+		svg . appendChild (c2s . getSvg ());
 	}
-
-	console.log('starting');
-	sliderules.draw(c2s, new_width, new_height);
-	sliderules.draw(ctx, new_width, new_height);
-	console.log('done');
-
-	svg.appendChild(c2s.getSvg());
+	sliderules . draw (ctx, new_width, new_height);
 };
 
 setInterval (drawSliderule, 20);
