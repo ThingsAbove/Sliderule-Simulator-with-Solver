@@ -17,7 +17,7 @@
     var m = x / Math.pow(10, exp);
     if (m >= 10) { m /= 10; exp += 1; }
     if (m < 1 && m > 0) { m *= 10; exp -= 1; }
-    return { m: crnu(m), exp: exp };
+    return { m: crnu(m), exp: exp }; // crnu = decimal places for mantissa; display uses formatSigFig
   }
 
   function flattenOps(ast, out) {
@@ -56,6 +56,14 @@
     var delayMsg = 2000;
     var delayAction = 1500;
     var delayObj = 6000;
+    /** Slide rule precision: at most 4 significant figures display, 3 for final/read results. */
+    var PREC = 4;
+    var PREC_FINAL = 3;
+    /** Format a number with n significant figures for display (crnu uses decimal places, not sig figs). */
+    function formatSigFig(x, n) {
+      if (x === 0 || !isFinite(x)) return String(x);
+      return String(Number(Number(x).toPrecision(n)));
+    }
     var currentMantissa = null;
     var currentExp = 0;
     var sidesUsed = { front: false, back: false };
@@ -64,6 +72,17 @@
     var lastWasFinalSqrt = false;
     /** After sqrt on R1/R2 (no A scale), cursor does not "hold" the value; next multiply must re-enter it. */
     var lastResultFromRScale = false;
+
+    /** Exponent log scratchpad: reason for last change (shown at end of every instruction). */
+    var exponentLogReason = '\u2014';
+    /** Capture current exponent state and return an action that shows that state for this step only. */
+    function displayMessageWithExponent(t) {
+      var _exp = currentExp;
+      var _reason = exponentLogReason;
+      return function () {
+        message(t + ' \u2016 Exponent log: ' + _exp + (_reason ? ' \u2014 ' + _reason : ''));
+      };
+    }
 
     // ——— Rule book: body limits, scale positions, division/mult and index choice ———
     var limitL = 0.03;
@@ -136,15 +155,16 @@
       var dVal = man.m;
       currentMantissa = man.m;
       currentExp = man.exp;
+      exponentLogReason = 'first factor ' + formatSigFig(man.m, PREC) + '\u00d710^' + man.exp;
       lastWasBack = false;
       lastResultOnD = true;
       ensureFront();
       var cIndex = (useRightIndex === true) ? 10 : 1;
       var indexLabel = (useRightIndex === true) ? 'right index (10)' : 'left index (1)';
       var indexReason = (useRightIndex === true) ? ' (Product will be over 10; use right index so the result stays on the D scale.)' : '';
-      steps.push({ action: function () { message('Calculate: ' + equationStr); }, delay: 500 });
+      steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
       steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-      steps.push({ action: function () { message('First factor is ' + crnu(v, 5) + '. Move the slide so the ' + indexLabel + ' on C is over ' + crnu(v, 5) + ' on the D scale.' + indexReason); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('First factor is ' + formatSigFig(v, PREC) + '. Move the slide so the ' + indexLabel + ' on C is over ' + formatSigFig(v, PREC) + ' on the D scale.' + indexReason), delay: delayMsg });
       steps.push({ action: function () {
         if (typeof changeSide === 'function') changeSide('front');
         ensureSide(['C', 'D']);
@@ -159,12 +179,13 @@
       var dVal = man.m;
       currentMantissa = man.m;
       currentExp = man.exp;
+      exponentLogReason = 'dividend ' + formatSigFig(man.m, PREC) + '\u00d710^' + man.exp;
       lastWasBack = false;
       lastResultOnD = true;
       ensureFront();
-      steps.push({ action: function () { message('Calculate: ' + equationStr); }, delay: 500 });
+      steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
       steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-      steps.push({ action: function () { message('Division chain: set the dividend. Move the cursor to ' + crnu(v, 5) + ' on the D scale.'); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('Division chain: set the dividend. Move the cursor to ' + formatSigFig(v, PREC) + ' on the D scale.'), delay: delayMsg });
       steps.push({ action: function () {
         if (typeof changeSide === 'function') changeSide('front');
         ensureSide(['C', 'D']);
@@ -179,20 +200,22 @@
         var actualVal = op.left;
         var resultWasOnD = lastResultOnD;
         steps.push({
-          action: function () {
-            var noFlip = typeof currentSideHasScales === 'function' && currentSideHasScales(['C', 'D']);
-            var msg;
-            if (resultWasOnD) {
-              msg = noFlip
-                ? 'The cursor is linked—it is already at the correct position. The value you are multiplying is ' + crnu(actualVal, 5) + ' (mantissa ' + crnu(transferVal, 5) + ' on D). C and D are on this side; no need to flip.'
-                : 'Flip the rule to the front. The cursor is linked—it is already at the correct position. The value you are multiplying is ' + crnu(actualVal, 5) + ' (mantissa ' + crnu(transferVal, 5) + ' on D).';
-            } else {
-              msg = noFlip
-                ? 'Move the cursor to the result found on the L scale (' + crnu(actualVal, 5) + ') to the D scale (' + crnu(transferVal, 5) + '). C and D are on this side; no need to flip.'
-                : 'Flip the rule to the front. Move the cursor to the result found on the L scale (' + crnu(actualVal, 5) + ') to the D scale (' + crnu(transferVal, 5) + ').';
-            }
-            message(msg);
-          },
+          action: (function (_exp, _reason) {
+            return function () {
+              var noFlip = typeof currentSideHasScales === 'function' && currentSideHasScales(['C', 'D']);
+              var msg;
+              if (resultWasOnD) {
+                msg = noFlip
+                  ? 'The cursor is linked—it is already at the correct position. The value you are multiplying is ' + formatSigFig(actualVal, PREC) + ' (mantissa ' + formatSigFig(transferVal, PREC) + ' on D). C and D are on this side; no need to flip.'
+                  : 'Flip the rule to the front. The cursor is linked—it is already at the correct position. The value you are multiplying is ' + formatSigFig(actualVal, PREC) + ' (mantissa ' + formatSigFig(transferVal, PREC) + ' on D).';
+              } else {
+                msg = noFlip
+                  ? 'Move the cursor to the result found on the L scale (' + formatSigFig(actualVal, PREC) + ') to the D scale (' + formatSigFig(transferVal, PREC) + '). C and D are on this side; no need to flip.'
+                  : 'Flip the rule to the front. Move the cursor to the result found on the L scale (' + formatSigFig(actualVal, PREC) + ') to the D scale (' + formatSigFig(transferVal, PREC) + ').';
+              }
+              message(msg + ' \u2016 Exponent log: ' + _exp + (_reason ? ' \u2014 ' + _reason : ''));
+            };
+          })(currentExp, exponentLogReason),
           delay: delayMsg
         });
         steps.push({
@@ -222,9 +245,8 @@
       var manB = toMantissa(b);
       var prod = op.result;
       var manProd = toMantissa(prod);
-      var prodMsg = crnu(prod, 5);
+      var prodMsg = formatSigFig(prod, PREC_FINAL);
       currentMantissa = manProd.m;
-      currentExp = currentExp + manB.exp;
       lastResultOnD = true;
       ensureFront();
       var shiftLeft = Math.log10(a);
@@ -238,11 +260,13 @@
       } else {
         useCF = true;
       }
+      currentExp = manProd.exp;
+      exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp + (useRightIndex ? ' + 1 (index shift: slide left)' : '');
       var cIndex = useRightIndex ? 10 : 1;
-      var rScaleReadRounded = afterRScaleSqrt ? crnu(cursorCVal, 3) : null;
+      var rScaleReadRounded = afterRScaleSqrt ? formatSigFig(cursorCVal, PREC_FINAL) : null;
       if (useCF) {
         steps.push({ action: function () { undimScales(['CF', 'DF']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () { message('Second factor ' + crnu(cursorCVal, 5) + ' would be off C; use folded scales. Set cursor to ' + crnu(firstFactor, 5) + ' on DF, align index on CF, then cursor to ' + crnu(cursorCVal, 5) + ' on CF and read product on DF.'); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Second factor ' + formatSigFig(cursorCVal, PREC) + ' would be off C; use folded scales. Set cursor to ' + formatSigFig(firstFactor, PREC) + ' on DF, align index on CF, then cursor to ' + formatSigFig(cursorCVal, PREC) + ' on CF and read product on DF.'), delay: delayMsg });
         steps.push({ action: function () {
           if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['CF', 'DF']) && typeof changeSide === 'function') changeSide('front');
           ensureSide(['CF', 'DF']);
@@ -250,24 +274,24 @@
         }, delay: delayAction });
         steps.push({ action: function () { slideTo('CF', 1); }, delay: delayAction });
         steps.push({ action: function () { cursorTo('CF', cursorCVal); }, delay: delayAction });
-        steps.push({ action: function () { message('Read intermediate result ' + prodMsg + ' on DF.'); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Read intermediate result ' + prodMsg + ' on DF.'), delay: delayMsg });
       } else {
         steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        var msgSetSlide = (useRightIndex ? 'Move the slide so the right index (10) on C is over ' : (afterRScaleSqrt ? 'Set the first factor: move the slide so the left index (1) on C is over ' : 'Move the slide so the left index (1) on C is over ')) + crnu(firstFactor, 5) + ' on the D scale.';
+        var msgSetSlide = (useRightIndex ? 'Move the slide so the right index (10) on C is over ' : (afterRScaleSqrt ? 'Set the first factor: move the slide so the left index (1) on C is over ' : 'Move the slide so the left index (1) on C is over ')) + formatSigFig(firstFactor, PREC) + ' on the D scale.';
         var msgCursor = rScaleReadRounded
           ? ('Move the cursor to ' + rScaleReadRounded + ' on the C scale (the value you read from the R scale).')
-          : ('Move the cursor to ' + crnu(cursorCVal, 5) + ' on the C scale.');
-        steps.push({ action: function () { message(msgSetSlide); }, delay: delayMsg });
+          : ('Move the cursor to ' + formatSigFig(cursorCVal, PREC) + ' on the C scale.');
+        steps.push({ action: displayMessageWithExponent(msgSetSlide), delay: delayMsg });
         steps.push({ action: function () {
           if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
           ensureSide(['C', 'D']);
           cursorTo('D', firstFactor);
         }, delay: delayAction });
         steps.push({ action: function () { slideTo('C', cIndex); }, delay: delayAction });
-        steps.push({ action: function () { message(msgCursor); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent(msgCursor), delay: delayMsg });
         steps.push({ action: function () { cursorTo('C', cursorCVal); }, delay: delayAction });
-        var readMsg = afterRScaleSqrt ? ('Read result ' + crnu(prod, 3) + ' on D.') : ('Read intermediate result ' + prodMsg + ' on D.' + (useRightIndex ? ' (Adjust decimal: result is ' + prodMsg + '.)' : ''));
-        steps.push({ action: function () { message(readMsg); }, delay: delayMsg });
+        var readMsg = afterRScaleSqrt ? ('Read result ' + formatSigFig(prod, PREC_FINAL) + ' on D.') : ('Read intermediate result ' + prodMsg + ' on D.' + (useRightIndex ? ' (Adjust decimal: result is ' + prodMsg + '.)' : ''));
+        steps.push({ action: displayMessageWithExponent(readMsg), delay: delayMsg });
       }
     }
 
@@ -278,12 +302,14 @@
         ensureFront();
         var transferVal = currentMantissa;
         steps.push({
-          action: function () {
-            var msg = (typeof currentSideHasScales === 'function' && currentSideHasScales(['C', 'D']))
-              ? 'Set cursor to ' + crnu(transferVal, 5) + ' on D (C and D are on this side; no need to flip).'
-              : 'Result so far is on the other side. Switch to front and set cursor to ' + crnu(transferVal, 5) + ' on D.';
-            message(msg);
-          },
+          action: (function (_exp, _reason) {
+            return function () {
+              var msg = (typeof currentSideHasScales === 'function' && currentSideHasScales(['C', 'D']))
+                ? 'Set cursor to ' + formatSigFig(transferVal, PREC) + ' on D (C and D are on this side; no need to flip).'
+                : 'Result so far is on the other side. Switch to front and set cursor to ' + formatSigFig(transferVal, PREC) + ' on D.';
+              message(msg + ' \u2016 Exponent log: ' + _exp + (_reason ? ' \u2014 ' + _reason : ''));
+            };
+          })(currentExp, exponentLogReason),
           delay: delayMsg
         });
         steps.push({
@@ -302,9 +328,8 @@
       var quot = op.result;
       var manQuot = toMantissa(quot);
       var divisorM = manDiv.m;
-      var quotMsg = crnu(quot, 5);
+      var quotMsg = formatSigFig(quot, PREC_FINAL);
       currentMantissa = manQuot.m;
-      currentExp = currentExp - manDiv.exp;
       lastResultOnD = true;
       var newSlideShift = Math.log10(dividend) - Math.log10(divisorM);
 
@@ -313,16 +338,20 @@
       var method = (useCIorCIF === 'CI' || useCIorCIF === 'CIF') ? useCIorCIF : 'C';
 
       if (method === 'CI') {
+        currentExp = manQuot.exp;
+        exponentLogReason = 'divide by ' + formatSigFig(manDiv.m, PREC) + '\u00d710^' + manDiv.exp;
         ensureFrontWithCI();
         steps.push({ action: function () { undimScales(['C', 'D', 'CI']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': Move the cursor to ' + crnu(divisorM, 5) + ' on the CI scale. Read the intermediate result (' + quotMsg + ') on the D scale under the cursor.'); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Divide by ' + formatSigFig(divisor, PREC) + ': Move the cursor to ' + formatSigFig(divisorM, PREC) + ' on the CI scale. Read the intermediate result (' + quotMsg + ') on the D scale under the cursor.'), delay: delayMsg });
         steps.push({ action: function () { ensureSide(['C', 'D', 'CI']); cursorTo('CI', divisorM); }, delay: delayAction });
         return { slideShift: chainSlideShift, cursorAtIndex: false };
       }
       if (method === 'CIF') {
+        currentExp = manQuot.exp;
+        exponentLogReason = 'divide by ' + formatSigFig(manDiv.m, PREC) + '\u00d710^' + manDiv.exp;
         ensureFrontWithCI();
         steps.push({ action: function () { undimScales(['C', 'D', 'CI', 'CIF', 'DF']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': Move the cursor to ' + crnu(divisorM, 5) + ' on the CIF scale. Read the intermediate result (' + quotMsg + ') on the D scale under the cursor.'); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Divide by ' + formatSigFig(divisor, PREC) + ': Move the cursor to ' + formatSigFig(divisorM, PREC) + ' on the CIF scale. Read the intermediate result (' + quotMsg + ') on the D scale under the cursor.'), delay: delayMsg });
         steps.push({ action: function () { ensureSide(['C', 'D', 'CI', 'CIF', 'DF']); cursorTo('CIF', divisorM); }, delay: delayAction });
         return { slideShift: chainSlideShift, cursorAtIndex: false };
       }
@@ -330,19 +359,21 @@
       ensureFront();
       steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
       var readIndex = whichIndex(newSlideShift, manQuot.m);
+      currentExp = manQuot.exp;
+      exponentLogReason = 'divide by ' + formatSigFig(manDiv.m, PREC) + '\u00d710^' + manDiv.exp + (readIndex === 10 ? ' \u22121 (index shift: slide left)' : '');
       var indexLabel = (readIndex === 10) ? 'right index (10)' : 'left index (1)';
       if (inDivisionChain && divisionIndexInChain > 0) {
         if (cursorAtIndex) {
-          steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': Move the slide so ' + crnu(divisorM, 5) + ' on the C scale is under the cursor. The intermediate result (' + quotMsg + ') is now located on the D scale under the slide index.'); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Divide by ' + formatSigFig(divisor, PREC) + ': Move the slide so ' + formatSigFig(divisorM, PREC) + ' on the C scale is under the cursor. The intermediate result (' + quotMsg + ') is now located on the D scale under the slide index.'), delay: delayMsg });
         } else {
-          steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': You must move the slide to continue the chain. Move the slide so the index (or ' + crnu(divisorM, 5) + ' on the C scale) is aligned with the previous result (' + crnu(dividend, 5) + ') on the D scale. The new result (' + quotMsg + ') will be found under the slide index on the D scale.'); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Divide by ' + formatSigFig(divisor, PREC) + ': You must move the slide to continue the chain. Move the slide so the index (or ' + formatSigFig(divisorM, PREC) + ' on the C scale) is aligned with the previous result (' + formatSigFig(dividend, PREC) + ') on the D scale. The new result (' + quotMsg + ') will be found under the slide index on the D scale.'), delay: delayMsg });
         }
       } else {
-        steps.push({ action: function () { message('Divide by ' + crnu(divisor, 5) + ': Move the slide so ' + crnu(divisorM, 5) + ' on the C scale is under the cursor. The intermediate result (' + quotMsg + ') is now located on the D scale under the slide index.'); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Divide by ' + formatSigFig(divisor, PREC) + ': Move the slide so ' + formatSigFig(divisorM, PREC) + ' on the C scale is under the cursor. The intermediate result (' + quotMsg + ') is now located on the D scale under the slide index.'), delay: delayMsg });
       }
       steps.push({ action: function () { slideTo('C', divisorM); }, delay: delayAction });
       steps.push({ action: function () { cursorTo('C', readIndex); }, delay: delayAction });
-      steps.push({ action: function () { message((inDivisionChain ? 'Intermediate result (' : 'Result (') + quotMsg + ') on the D scale under the ' + indexLabel + '.'); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent((inDivisionChain ? 'Intermediate result (' : 'Result (') + quotMsg + ') on the D scale under the ' + indexLabel + '.'), delay: delayMsg });
       return { slideShift: newSlideShift, cursorAtIndex: true };
     }
 
@@ -391,9 +422,9 @@
         if (profile.hasA) {
           steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
           steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          steps.push({ action: function () { message('Square: cursor to ' + crnu(manBase.m, 5) + ' on D, read ' + crnu(result, 5) + ' on A.'); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Square: cursor to ' + formatSigFig(manBase.m, PREC) + ' on D, read ' + formatSigFig(result, PREC_FINAL) + ' on A.'), delay: delayMsg });
           steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
-          steps.push({ action: function () { message('Read result on A scale: ' + crnu(result, 5)); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Read result on A scale: ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
         } else {
           var nDigitsSq = digitsLeftOfDecimal(result);
           var useR1Sq = (nDigitsSq % 2 === 1);
@@ -401,11 +432,12 @@
           var rHintSq = useR1Sq ? 'Odd number of digits in result → use R1.' : 'Even number of digits in result → use R2.';
           steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.front = true; }, delay: 100 });
           steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          steps.push({ action: function () { message('Square: cursor to ' + crnu(manBase.m, 5) + ' on D, read ' + crnu(result, 5) + ' on ' + rScaleSq + '. ' + rHintSq); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Square: cursor to ' + formatSigFig(manBase.m, PREC) + ' on D, read ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScaleSq + '. ' + rHintSq), delay: delayMsg });
           steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
-          steps.push({ action: function () { message('Read result on ' + rScaleSq + ' scale: ' + crnu(result, 5)); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Read result on ' + rScaleSq + ' scale: ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
         }
         currentExp = currentExp * 2;
+        exponentLogReason = 'square: exponent \u00d7 2';
         lastResultOnD = false;
       } else if (exp === 0.5) {
         ensureFront();
@@ -414,9 +446,9 @@
           var aVal = half === 'left' ? manBase.m : manBase.m * 10;
           steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
           steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          steps.push({ action: function () { message('Square root: use ' + half + ' half of A (exponent ' + (half === 'left' ? 'even' : 'odd') + '). Cursor to ' + crnu(base, 5) + ' on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Square root: use ' + half + ' half of A (exponent ' + (half === 'left' ? 'even' : 'odd') + '). Cursor to ' + formatSigFig(base, PREC) + ' on A, read ' + formatSigFig(result, PREC_FINAL) + ' on D.'), delay: delayMsg });
           steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
-          steps.push({ action: function () { message('Read result on D scale: ' + crnu(result, 5)); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Read result on D scale: ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
         } else {
           var nDigitsSqrtPow = digitsLeftOfDecimal(base);
           var useR1SqrtPow = (nDigitsSqrtPow % 2 === 1);
@@ -424,19 +456,21 @@
           var rHintSqrtPow = useR1SqrtPow ? 'Odd number of digits to the left of the decimal → use R1.' : 'Even number of digits to the left of the decimal → use R2.';
           steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.front = true; }, delay: 100 });
           steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          steps.push({ action: function () { message('Square root of ' + crnu(base, 5) + ': use R scales. Set cursor on ' + crnu(manBase.m, 5) + ' on D, read ' + crnu(result, 5) + ' on ' + rScaleSqrtPow + '. ' + rHintSqrtPow); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(base, PREC) + ': use R scales. Set cursor on ' + formatSigFig(manBase.m, PREC) + ' on D, read ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScaleSqrtPow + '. ' + rHintSqrtPow), delay: delayMsg });
           steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
-          steps.push({ action: function () { message('Result ' + crnu(result, 5) + ' on ' + rScaleSqrtPow + ' scale.'); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScaleSqrtPow + ' scale.'), delay: delayMsg });
         }
         currentExp = Math.floor(currentExp / 2);
+        exponentLogReason = 'sqrt: exponent \u00f7 2';
       } else if (exp === 3) {
         ensureFront();
         steps.push({ action: function () { ensureSide(['K', 'D']); sidesUsed.front = true; }, delay: 100 });
         steps.push({ action: function () { undimScales(['K', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () { message('Cube: cursor to ' + crnu(manBase.m, 5) + ' on D, read ' + crnu(result, 5) + ' on K.'); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Cube: cursor to ' + formatSigFig(manBase.m, PREC) + ' on D, read ' + formatSigFig(result, PREC_FINAL) + ' on K.'), delay: delayMsg });
         steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
-        steps.push({ action: function () { message('Read result on K scale: ' + crnu(result, 5)); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Read result on K scale: ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
         currentExp = currentExp * 3;
+        exponentLogReason = 'cube: exponent \u00d7 3';
         lastResultOnD = false;
       } else if (Math.abs(exp - 1/3) < 1e-9) {
         ensureFront();
@@ -444,10 +478,11 @@
         var thirdName = (third === 0) ? 'left' : (third === 1 ? 'middle' : 'right');
         steps.push({ action: function () { ensureSide(['K', 'D']); sidesUsed.front = true; }, delay: 100 });
         steps.push({ action: function () { undimScales(['K', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () { message('Cube root: use ' + thirdName + ' third of K. Cursor to ' + crnu(base, 5) + ' on K, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Cube root: use ' + thirdName + ' third of K. Cursor to ' + formatSigFig(base, PREC) + ' on K, read ' + formatSigFig(result, PREC_FINAL) + ' on D.'), delay: delayMsg });
         steps.push({ action: function () { cursorTo('K', manBase.m); }, delay: delayAction });
-        steps.push({ action: function () { message('Read result on D scale: ' + crnu(result, 5)); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Read result on D scale: ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
         currentExp = Math.floor(currentExp / 3);
+        exponentLogReason = 'cube root: exponent \u00f7 3';
       } else if (base > 0 && result > 0) {
         var LL_LIMIT = Math.exp(10);
         var resultOffScale = result > LL_LIMIT;
@@ -478,30 +513,19 @@
           ensureBack();
           steps.push({ action: function () { ensureSide([lScaleName, 'C', 'D']); sidesUsed.back = true; }, delay: 100 });
           steps.push({ action: function () { undimScales([lScaleName, 'C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          steps.push({ action: function () {
-            message(crnu(base, 2) + '^' + exp + ' = ' + resultD + '×10^' + characteristic + ' exceeds the end of the LL3 scale (~22,026). Use the log method: log₁₀(a^b) = b × log₁₀(a).');
-          }, delay: delayMsg });
-          steps.push({ action: function () {
-            message('Step A: Find log₁₀(' + crnu(base, 2) + '). Cursor to ' + crnu(manBase.m, 3) + ' on D; read on L: log₁₀(' + crnu(base, 2) + ') ≈ ' + log10BaseD + '.');
-          }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent(formatSigFig(base, 2) + '^' + exp + ' = ' + resultD + '×10^' + characteristic + ' exceeds the end of the LL3 scale (~22,026). Use the log method: log₁₀(a^b) = b × log₁₀(a).'), delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Step A: Find log₁₀(' + formatSigFig(base, 2) + '). Cursor to ' + formatSigFig(manBase.m, PREC) + ' on D; read on L: log₁₀(' + formatSigFig(base, 2) + ') ≈ ' + log10BaseD + '.'), delay: delayMsg });
           steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
-          steps.push({ action: function () {
-            message('Step B: Compute ' + exp + ' × ' + log10BaseD + ' on C and D. Set the ' + indexLabel + ' of C over ' + crnu(dVal, 3) + ' on D (representing ' + log10BaseD + '). Move the cursor to ' + crnu(cVal, 3) + ' on the C scale (representing ' + exp + ').' + (useRightIndex ? ' Using the right index keeps 6.6 on C to the left, over the result on D.' : ''));
-          }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Step B: Compute ' + exp + ' × ' + log10BaseD + ' on C and D. Set the ' + indexLabel + ' of C over ' + formatSigFig(dVal, PREC) + ' on D (representing ' + log10BaseD + '). Move the cursor to ' + formatSigFig(cVal, PREC) + ' on the C scale (representing ' + exp + ').' + (useRightIndex ? ' Using the right index keeps 6.6 on C to the left, over the result on D.' : '')), delay: delayMsg });
           steps.push({ action: function () { cursorTo('D', dVal); slideTo('C', cIndex); }, delay: delayAction });
           steps.push({ action: function () { cursorTo('C', cVal); }, delay: delayAction });
-          steps.push({ action: function () {
-            message('Step C: Read ' + crnu(readOnD, 3) + ' on D (i.e. ' + productD + '). Characteristic ' + characteristic + ', mantissa of log ≈ ' + logMantissaD + '.');
-          }, delay: delayMsg });
-          steps.push({ action: function () {
-            message('Step D: Antilog: cursor to ' + logMantissaD + ' on the L scale; read result mantissa on D ≈ ' + resultMantD + ' (slide rule reading, 3–4 significant figures).');
-          }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Step C: Read ' + formatSigFig(readOnD, PREC_FINAL) + ' on D (i.e. ' + productD + '). Characteristic ' + characteristic + ', mantissa of log ≈ ' + logMantissaD + '.'), delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Step D: Antilog: cursor to ' + logMantissaD + ' on the L scale; read result mantissa on D ≈ ' + resultMantD + ' (slide rule reading, 3–4 significant figures).'), delay: delayMsg });
           steps.push({ action: function () { cursorTo(lScaleName, logMantissa); }, delay: delayAction });
-          steps.push({ action: function () {
-            message('Result: ' + crnu(base, 2) + '^' + exp + ' = ' + resultMantD + ' × 10^' + characteristic + ' ≈ ' + resultD + '×10^' + characteristic + '.');
-          }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Result: ' + formatSigFig(base, 2) + '^' + exp + ' = ' + resultMantD + ' × 10^' + characteristic + ' ≈ ' + resultD + '×10^' + characteristic + '.'), delay: delayMsg });
           currentMantissa = manResult.m;
           currentExp = resultExp;
+          exponentLogReason = 'power: result exponent';
           lastWasBack = true;
           lastResultOnD = true;
         } else {
@@ -524,31 +548,24 @@
             if (exp < 1 && exp >= 0.1) scaleJumpHint = ' Exponent between 0.1 and 1.0: result is one scale down (e.g. LL3 → LL2).';
             else if (exp < 0.1 && exp >= 0.01) scaleJumpHint = ' Exponent between 0.01 and 0.1: result is two scales down (e.g. LL3 → LL1).';
             else if (exp < 0.01 && exp > 0) scaleJumpHint = ' Exponent &lt; 0.01: result is three scales down.';
-            var resultReadD = (result >= 1 && result < 10) ? crnu(result, 4) : (result >= 0.1 && result < 1 ? crnu(result, 4) : Number(result).toPrecision(4));
-            steps.push({ action: function () {
-              message('Power ' + crnu(base, 3) + '^' + exp + ' using LL scales: set the cursor so the hairline is over ' + crnu(manBase.m, 3) + ' on the ' + baseScaleLabel + ' scale.');
-            }, delay: delayMsg });
+            var resultReadD = formatSigFig(result, PREC_FINAL);
+            steps.push({ action: displayMessageWithExponent('Power ' + formatSigFig(base, PREC) + '^' + exp + ' using LL scales: set the cursor so the hairline is over ' + formatSigFig(manBase.m, PREC) + ' on the ' + baseScaleLabel + ' scale.'), delay: delayMsg });
             steps.push({ action: function () { cursorTo(baseScaleName, manBase.m); }, delay: delayAction });
-            steps.push({ action: function () {
-              message('Move the slide so the left index (1) of the C scale is under the cursor. The rule is now set for base ' + crnu(base, 3) + '.');
-            }, delay: delayMsg });
+            steps.push({ action: displayMessageWithExponent('Move the slide so the left index (1) of the C scale is under the cursor. The rule is now set for base ' + formatSigFig(base, PREC) + '.'), delay: delayMsg });
             steps.push({ action: function () { slideTo('C', 1); }, delay: delayAction });
-            steps.push({ action: function () {
-              message('Move the cursor to ' + crnu(expM, 3) + ' on the C scale (representing exponent ' + exp + ').' + (exp > 10 ? ' Use ' + crnu(expM, 3) + ' because ' + exp + ' is off the physical C scale.' : (exp < 1 ? ' For exponent &lt; 1 the result appears on a lower LL scale.' : '')) + scaleJumpHint);
-            }, delay: delayMsg });
+            steps.push({ action: displayMessageWithExponent('Move the cursor to ' + formatSigFig(expM, PREC) + ' on the C scale (representing exponent ' + exp + ').' + (exp > 10 ? ' Use ' + formatSigFig(expM, PREC) + ' because ' + exp + ' is off the physical C scale.' : (exp < 1 ? ' For exponent &lt; 1 the result appears on a lower LL scale.' : '')) + scaleJumpHint), delay: delayMsg });
             steps.push({ action: function () { cursorTo('C', expM); }, delay: delayAction });
-            steps.push({ action: function () {
-              message('Read ' + resultReadD + ' under the cursor on the ' + (resultScaleLabel || baseScaleLabel) + ' scale. (Do not use the D scale here—it is log-log; the value under the cursor on D is not the result mantissa.)');
-            }, delay: delayMsg });
+            steps.push({ action: displayMessageWithExponent('Read ' + resultReadD + ' under the cursor on the ' + (resultScaleLabel || baseScaleLabel) + ' scale. (Do not use the D scale here—it is log-log; the value under the cursor on D is not the result mantissa.)'), delay: delayMsg });
             currentExp = resultExp;
+            exponentLogReason = 'power: result exponent';
             lastWasBack = true;
             lastResultOnD = false;
           } else {
-            steps.push({ action: function () { message('Power ' + exp + ': use C/D chain or not supported; result is ' + crnu(result, 5)); }, delay: delayMsg });
+            steps.push({ action: displayMessageWithExponent('Power ' + exp + ': use C/D chain or not supported; result is ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
           }
         }
       } else {
-        steps.push({ action: function () { message('Power ' + exp + ': use C/D chain or not supported; result is ' + crnu(result, 5)); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Power ' + exp + ': use C/D chain or not supported; result is ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
       }
     }
 
@@ -566,11 +583,11 @@
         var rHint = useR1 ? 'Odd number of digits to the left of the decimal → use R1.' : 'Even number of digits to the left of the decimal → use R2.';
         steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.back = true; }, delay: 100 });
         steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () {
-          message('Square root of ' + crnu(arg, 5) + ' (final result): use the R scales for higher precision. Set the cursor on ' + crnu(manArg.m, 5) + ' on the D scale and read the result on ' + rScale + '. ' + rHint);
-        }, delay: delayMsg });
+        currentExp = manResult.exp;
+        exponentLogReason = 'sqrt: exponent \u00f7 2';
+        steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(arg, PREC) + ' (final result): use the R scales for higher precision. Set the cursor on ' + formatSigFig(manArg.m, PREC) + ' on the D scale and read the result on ' + rScale + '. ' + rHint), delay: delayMsg });
         steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
-        steps.push({ action: function () { message('Result ' + crnu(result, 5) + ' on ' + rScale + ' scale.'); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScale + ' scale.'), delay: delayMsg });
         lastResultOnD = false;
         lastWasBack = true;
         lastWasFinalSqrt = true;
@@ -581,21 +598,25 @@
           var aVal = half === 'left' ? manArg.m : manArg.m * 10;
           steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
           steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          steps.push({ action: function () { message('Square root of ' + crnu(arg, 5) + ': use ' + half + ' half of A. Cursor to value on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(arg, PREC) + ': use ' + half + ' half of A. Cursor to value on A, read ' + formatSigFig(result, PREC_FINAL) + ' on D.'), delay: delayMsg });
           steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
-          steps.push({ action: function () { message('Result ' + crnu(result, 5) + ' on D scale.'); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on D scale.'), delay: delayMsg });
+          currentExp = manResult.exp;
+          exponentLogReason = 'sqrt: exponent \u00f7 2';
           lastResultOnD = true;
         } else {
           var nDigitsSqrt = digitsLeftOfDecimal(arg);
           var useR1Sqrt = (nDigitsSqrt % 2 === 1);
           var rScaleSqrt = useR1Sqrt ? 'R1' : 'R2';
           var rHintSqrt = useR1Sqrt ? 'Odd number of digits to the left of the decimal → use R1.' : 'Even number of digits to the left of the decimal → use R2.';
-          var sqrtReadRounded = crnu(result, 3);
+          var sqrtReadRounded = formatSigFig(result, PREC_FINAL);
           steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.front = true; }, delay: 100 });
           steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          steps.push({ action: function () { message('Square root of ' + crnu(arg, 5) + ': use R scales. Set cursor on ' + crnu(manArg.m, 5) + ' on D, read ' + sqrtReadRounded + ' on ' + rScaleSqrt + '. ' + rHintSqrt); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(arg, PREC) + ': use R scales. Set cursor on ' + formatSigFig(manArg.m, PREC) + ' on D, read ' + sqrtReadRounded + ' on ' + rScaleSqrt + '. ' + rHintSqrt), delay: delayMsg });
           steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
-          steps.push({ action: function () { message('Result ' + sqrtReadRounded + ' on ' + rScaleSqrt + ' scale. The cursor is not a memory—you must re-enter this value on C or D for the next step.'); }, delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Result ' + sqrtReadRounded + ' on ' + rScaleSqrt + ' scale. The cursor is not a memory—you must re-enter this value on C or D for the next step.'), delay: delayMsg });
+          currentExp = manResult.exp;
+          exponentLogReason = 'sqrt: exponent \u00f7 2';
           lastResultOnD = false;
           lastResultFromRScale = true;
         }
@@ -608,11 +629,13 @@
       ensureBack();
       steps.push({ action: function () { ensureSide(['S', 'D']); sidesUsed.back = true; }, delay: 100 });
       steps.push({ action: function () { undimScales(['S', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-      steps.push({ action: function () { message('Sine of ' + crnu(arg, 5) + ' degrees: cursor to angle on S, read value on D.'); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('Sine of ' + formatSigFig(arg, PREC) + ' degrees: cursor to angle on S, read value on D.'), delay: delayMsg });
       steps.push({ action: function () { cursorTo('S', arg); }, delay: delayAction });
-      steps.push({ action: function () { message('Read sin = ' + crnu(result, 5) + ' on D (adjust decimal).'); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('Read sin = ' + formatSigFig(result, PREC_FINAL) + ' on D (adjust decimal).'), delay: delayMsg });
       currentMantissa = result >= 1 && result < 10 ? result : (result * 10);
       if (currentMantissa >= 10) currentMantissa /= 10;
+      currentExp = result !== 0 && isFinite(result) ? Math.floor(Math.log10(Math.abs(result))) : 0;
+      exponentLogReason = 'sin: result exponent';
       lastWasBack = true;
       lastResultOnD = false;
     }
@@ -623,9 +646,9 @@
       ensureBack();
       steps.push({ action: function () { ensureSide(['S', 'D']); sidesUsed.back = true; }, delay: 100 });
       steps.push({ action: function () { undimScales(['S', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-      steps.push({ action: function () { message('Cosine of ' + crnu(arg, 5) + ' degrees: cos(θ) = sin(90−θ). Cursor to ' + crnu(90 - arg, 5) + ' on S, read on D.'); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('Cosine of ' + formatSigFig(arg, PREC) + ' degrees: cos(θ) = sin(90−θ). Cursor to ' + formatSigFig(90 - arg, PREC) + ' on S, read on D.'), delay: delayMsg });
       steps.push({ action: function () { cursorTo('S', 90 - arg); }, delay: delayAction });
-      steps.push({ action: function () { message('Read cos = ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('Read cos = ' + formatSigFig(result, PREC_FINAL) + ' on D.'), delay: delayMsg });
       currentMantissa = result >= 1 && result < 10 ? result : (result * 10);
       if (currentMantissa >= 10) currentMantissa /= 10;
       lastWasBack = true;
@@ -637,11 +660,13 @@
       ensureBack();
       steps.push({ action: function () { ensureSide(['T', 'D']); sidesUsed.back = true; }, delay: 100 });
       steps.push({ action: function () { undimScales(['T', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-      steps.push({ action: function () { message('Tangent of ' + crnu(arg, 5) + ' degrees: cursor to angle on T, read on D.'); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('Tangent of ' + formatSigFig(arg, PREC) + ' degrees: cursor to angle on T, read on D.'), delay: delayMsg });
       steps.push({ action: function () { cursorTo('T', arg); }, delay: delayAction });
-      steps.push({ action: function () { message('Read tan = ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('Read tan = ' + formatSigFig(result, PREC_FINAL) + ' on D.'), delay: delayMsg });
       currentMantissa = result >= 1 && result < 10 ? result : (result * 10);
       if (currentMantissa >= 10) currentMantissa /= 10;
+      currentExp = result !== 0 && isFinite(result) ? Math.floor(Math.log10(Math.abs(result))) : 0;
+      exponentLogReason = 'tan: result exponent';
       lastWasBack = true;
       lastResultOnD = false;
     }
@@ -653,10 +678,12 @@
       steps.push({ action: function () { ensureSide([profile.scaleL, 'D']); sidesUsed.back = true; }, delay: 100 });
       steps.push({ action: function () { undimScales([profile.scaleL, 'D']); changeMarkings('hairline', true); }, delay: 500 });
       var manArg = toMantissa(arg);
-      steps.push({ action: function () { message('Log10 of ' + crnu(arg, 5) + ': cursor to value on D, read on L.'); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('Log10 of ' + formatSigFig(arg, PREC) + ': cursor to value on D, read on L.'), delay: delayMsg });
       steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
-      steps.push({ action: function () { message('Read log10 = ' + crnu(result, 5) + ' on the L scale. The L scale gives the mantissa (decimal part)—' + crnu(result, 5) + ' is the actual value for the next step.'); }, delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('Read log10 = ' + formatSigFig(result, PREC_FINAL) + ' on the L scale. The L scale gives the mantissa (decimal part)—' + formatSigFig(result, PREC_FINAL) + ' is the actual value for the next step.'), delay: delayMsg });
       currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
+      currentExp = result !== 0 && isFinite(result) ? Math.floor(Math.log10(Math.abs(result))) : 0;
+      exponentLogReason = 'log result (value for next step)';
       lastWasBack = true;
       lastResultOnD = false;
     }
@@ -671,27 +698,27 @@
         ensureBack();
         steps.push({ action: function () { ensureSide([llScaleName, 'D']); sidesUsed.back = true; }, delay: 100 });
         steps.push({ action: function () { undimScales([llScaleName, 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        var resultRead = (result >= 1 && result < 10) ? crnu(result, 3) : (result >= 0.1 && result < 1 ? crnu(result, 3) : (result >= 0.01 && result < 0.1 ? crnu(result, 4) : Number(result).toPrecision(3)));
+        var resultRead = formatSigFig(result, PREC_FINAL);
         var rangeHint = (llScaleLabel === 'LL3') ? '1.0 to 10.0' : (llScaleLabel === 'LL2') ? '0.1 to 1.0' : '0.01 to 0.1';
-        steps.push({ action: function () {
-          message('Natural log of ' + crnu(arg, 3) + ': On this rule, the D scale and LL scales are aligned so ln(y) is read directly. Find ' + crnu(manArg.m, 3) + ' on the ' + llScaleLabel + ' scale.');
-        }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Natural log of ' + formatSigFig(arg, PREC) + ': On this rule, the D scale and LL scales are aligned so ln(y) is read directly. Find ' + formatSigFig(manArg.m, PREC) + ' on the ' + llScaleLabel + ' scale.'), delay: delayMsg });
         steps.push({ action: function () { cursorTo(llScaleName, manArg.m); }, delay: delayAction });
-        steps.push({ action: function () {
-          message('Place the hairline over ' + crnu(manArg.m, 3) + ' on ' + llScaleLabel + '. Read the digits under the cursor on the D scale. ' + llScaleLabel + ' gives ln between ' + rangeHint + ', so ln(' + crnu(arg, 3) + ') = ' + resultRead + '.');
-        }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Place the hairline over ' + formatSigFig(manArg.m, PREC) + ' on ' + llScaleLabel + '. Read the digits under the cursor on the D scale. ' + llScaleLabel + ' gives ln between ' + rangeHint + ', so ln(' + formatSigFig(arg, PREC) + ') = ' + resultRead + '.'), delay: delayMsg });
         currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
         if (currentMantissa >= 10) currentMantissa /= 10;
+        currentExp = result !== 0 && isFinite(result) ? Math.floor(Math.log10(Math.abs(result))) : 0;
+        exponentLogReason = 'log result (value for next step)';
         lastWasBack = true;
         lastResultOnD = true;
       } else {
         ensureBack();
         steps.push({ action: function () { ensureSide([profile.scaleL, 'D']); sidesUsed.back = true; }, delay: 100 });
         steps.push({ action: function () { undimScales([profile.scaleL, 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () { message('Natural log of ' + crnu(arg, 5) + ': cursor to value on D, read log10 on L. Then ln(x) = log10(x) × 2.303.'); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Natural log of ' + formatSigFig(arg, PREC) + ': cursor to value on D, read log10 on L. Then ln(x) = log10(x) × 2.303.'), delay: delayMsg });
         steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
-        steps.push({ action: function () { message('Read log10 on L, then ln(x) = log10(x) × 2.303 = ' + crnu(result, 5)); }, delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Read log10 on L, then ln(x) = log10(x) × 2.303 = ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
         currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
+        currentExp = result !== 0 && isFinite(result) ? Math.floor(Math.log10(Math.abs(result))) : 0;
+        exponentLogReason = 'log result (value for next step)';
         lastWasBack = true;
         lastResultOnD = false;
       }
@@ -709,7 +736,7 @@
           var coefTimesPower = (i + 3 < ops.length && ops[i + 1].op === 'init' && ops[i + 2].op === '^' && ops[i + 3].op === '*');
           var powerOnly = (i + 2 < ops.length && ops[i + 1].op === 'init' && ops[i + 2].op === '^' && (i + 3 >= ops.length || ops[i + 3].op !== '*'));
           if (coefTimesPower || powerOnly) {
-            steps.push({ action: function () { message('Calculate: ' + equationStr); }, delay: 500 });
+            steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
             isFirstInit = false;
           } else if (divisionChain) {
             stepInitForDivision(op);
@@ -730,7 +757,7 @@
               currentExp = man.exp;
               lastWasBack = false;
               lastResultOnD = true;
-              steps.push({ action: function () { message('Calculate: ' + equationStr); }, delay: 500 });
+              steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
             } else {
               stepInit(op, false);
             }
@@ -759,7 +786,8 @@
     var finalVal = finalResult;
     var finalMan = toMantissa(finalResult);
     steps.unshift({ action: function () { ensureSide(['C', 'D']); cursorTo('D', 1); slideTo('C', 1); }, delay: 0 });
-    steps.unshift({ action: function () { message('Resetting slide rule to index (1 on C and D).'); }, delay: 100 });
+    var _resultExp = currentExp;
+    var _resultReason = exponentLogReason;
     steps.push({ action: function () {
       if (lastWasFinalSqrt) ensureSide(['R1', 'R2', 'D']);
       else if (lastWasBack) ensureSide(['S', 'D']);
@@ -770,7 +798,7 @@
         if (lastResultOnD) ok = checkValue('D', finalMan.m);
         else ok = true;
         if (ok) {
-          message('Result: ' + equationStr + ' = ' + crnu(finalVal, 5));
+          message('Result: ' + equationStr + ' = ' + formatSigFig(finalVal, PREC_FINAL) + ' \u2016 Exponent log: ' + _resultExp + (_resultReason ? ' \u2014 ' + _resultReason : ''));
           return true;
         }
         return false;
