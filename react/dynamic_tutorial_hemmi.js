@@ -165,12 +165,21 @@
         ensureFront();
         var transferVal = currentMantissa;
         var actualVal = op.left;
+        var resultWasOnD = lastResultOnD;
         steps.push({
           action: function () {
-            var flipMsg = (typeof currentSideHasScales === 'function' && currentSideHasScales(['C', 'D']))
-              ? 'The cursor is linked—it is already at the correct position. The value you are multiplying is ' + crnu(actualVal, 5) + ' (mantissa ' + crnu(transferVal, 5) + ' on D). C and D are on this side; no need to flip.'
-              : 'Flip the rule to the front. The cursor is linked—it is already at the correct position. The value you are multiplying is ' + crnu(actualVal, 5) + ' (mantissa ' + crnu(transferVal, 5) + ' on D).';
-            message(flipMsg);
+            var noFlip = typeof currentSideHasScales === 'function' && currentSideHasScales(['C', 'D']);
+            var msg;
+            if (resultWasOnD) {
+              msg = noFlip
+                ? 'The cursor is linked—it is already at the correct position. The value you are multiplying is ' + crnu(actualVal, 5) + ' (mantissa ' + crnu(transferVal, 5) + ' on D). C and D are on this side; no need to flip.'
+                : 'Flip the rule to the front. The cursor is linked—it is already at the correct position. The value you are multiplying is ' + crnu(actualVal, 5) + ' (mantissa ' + crnu(transferVal, 5) + ' on D).';
+            } else {
+              msg = noFlip
+                ? 'Move the cursor to the result found on the L scale (' + crnu(actualVal, 5) + ') to the D scale (' + crnu(transferVal, 5) + '). C and D are on this side; no need to flip.'
+                : 'Flip the rule to the front. Move the cursor to the result found on the L scale (' + crnu(actualVal, 5) + ') to the D scale (' + crnu(transferVal, 5) + ').';
+            }
+            message(msg);
           },
           delay: delayMsg
         });
@@ -566,6 +575,7 @@
       steps.push({ action: function () { message('Read log10 = ' + crnu(result, 5) + ' on the L scale. The L scale gives the mantissa (decimal part)—' + crnu(result, 5) + ' is the actual value for the next step.'); }, delay: delayMsg });
       currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
       lastWasBack = true;
+      lastResultOnD = false;
     }
 
     function stepLn(op) {
@@ -684,6 +694,13 @@
     }, delay: delayObj });
     steps.push({ action: function () { isolate(); message('Try again or enter another equation.'); }, delay: 4000 });
 
+    // Mark visible steps: those that show an instruction (message) or move cursor/slide. Setup-only (ensureSide, undimScales) are not visible.
+    for (var vi = 0; vi < steps.length; vi++) {
+      var actionStr = steps[vi].action.toString();
+      var setupOnly = (actionStr.indexOf('ensureSide') !== -1 && actionStr.indexOf('message') === -1 && actionStr.indexOf('cursorTo') === -1 && actionStr.indexOf('slideTo') === -1) ||
+          (actionStr.indexOf('undimScales') !== -1 && actionStr.indexOf('message') === -1 && actionStr.indexOf('cursorTo') === -1 && actionStr.indexOf('slideTo') === -1);
+      steps[vi].visible = !setupOnly;
+    }
     return steps;
   }
 

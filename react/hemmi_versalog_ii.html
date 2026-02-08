@@ -291,18 +291,23 @@ function onReplayDynamicTutorial () {
 }
 function updateTutorialStepControls () {
   var s = typeof dynamicTutorialState !== 'undefined' ? dynamicTutorialState : { steps: null, index: 0 };
-  var n = s.steps ? s.steps.length : 0;
+  var steps = s.steps;
+  var n = steps ? steps.length : 0;
   var i = s.index;
+  var visCount = (typeof dynamicTutorialVisibleCount === 'function') ? dynamicTutorialVisibleCount(steps) : n;
+  var visDone = (typeof dynamicTutorialCountVisibleBefore === 'function') ? dynamicTutorialCountVisibleBefore(steps, i) : i;
+  var atFirstVisible = visDone <= 0;
+  var atLastVisible = i >= n || (typeof dynamicTutorialNextVisibleIndex === 'function' && dynamicTutorialNextVisibleIndex(steps, i) >= n);
   var prevBtn = document.getElementById('tutorial_prev');
   var nextBtn = document.getElementById('tutorial_next');
   var playBtn = document.getElementById('tutorial_play');
   var pauseBtn = document.getElementById('tutorial_pause');
   var counterEl = document.getElementById('tutorial_step_counter');
-  if (prevBtn) prevBtn.disabled = n === 0 || i <= 0;
-  if (nextBtn) nextBtn.disabled = n === 0 || i >= n;
+  if (prevBtn) prevBtn.disabled = n === 0 || atFirstVisible;
+  if (nextBtn) nextBtn.disabled = n === 0 || atLastVisible;
   if (playBtn) playBtn.disabled = n === 0 || i >= n;
   if (pauseBtn) pauseBtn.disabled = n === 0;
-  if (counterEl) counterEl.textContent = 'Step ' + i + ' of ' + n;
+  if (counterEl) counterEl.textContent = visCount ? ('Step ' + visDone + ' of ' + visCount + ' (visible)') : 'Step 0 of 0';
 }
 function onTutorialStepBack () {
   if (typeof dynamicTutorialStepBack === 'function') dynamicTutorialStepBack();

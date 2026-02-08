@@ -406,18 +406,43 @@ var sequencer = function (steps, index, onStep) {
 };
 
 var dynamicTutorialState = { steps: null, index: 0, info: 'info' };
+function dynamicTutorialCountVisibleBefore (steps, index) {
+  if (! steps) return 0;
+  var n = 0;
+  for (var i = 0; i < index; i++) if (steps [i] . visible !== false) n++;
+  return n;
+}
+function dynamicTutorialVisibleCount (steps) {
+  if (! steps) return 0;
+  var n = 0;
+  for (var i = 0; i < steps . length; i++) if (steps [i] . visible !== false) n++;
+  return n;
+}
+function dynamicTutorialNextVisibleIndex (steps, fromIndex) {
+  if (! steps || fromIndex >= steps . length) return fromIndex;
+  for (var i = fromIndex; i < steps . length; i++) if (steps [i] . visible !== false) return i;
+  return steps . length;
+}
+function dynamicTutorialPrevVisibleIndex (steps, fromIndex) {
+  if (! steps || fromIndex <= 0) return 0;
+  for (var i = fromIndex - 1; i >= 0; i--) if (steps [i] . visible !== false) return i;
+  return 0;
+}
 var dynamicTutorialStepForward = function () {
   var s = dynamicTutorialState;
   if (! s . steps || s . index >= s . steps . length) return;
   clearTimeout (sequencerTimeout);
-  s . steps [s . index] . action ();
-  s . index += 1;
+  do {
+    s . steps [s . index] . action ();
+    s . index += 1;
+  } while (s . index < s . steps . length && s . steps [s . index] . visible === false);
 };
 var dynamicTutorialStepBack = function () {
   var s = dynamicTutorialState;
   clearTimeout (sequencerTimeout);
   if (! s . steps || s . index <= 0) return;
-  s . index -= 1;
+  var prev = dynamicTutorialPrevVisibleIndex (s . steps, s . index);
+  s . index = prev;
   var el = document . getElementById (s . info);
   if (el) el . innerHTML = '';
   for (var i = 0; i < s . index; i++) s . steps [i] . action ();
