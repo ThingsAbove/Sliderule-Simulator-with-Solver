@@ -1490,7 +1490,7 @@ var Rule = function (options) {
       var region = new Path2D ();
       roundRect (region, 0, length * (this . left_margin - this . alt_left_margin), 0, (1 + this . left_margin + this . right_margin) * length, (1 + this . left_margin + this . alt_right_margin) * length, this . ruleRealHeight (), this . rounding);
       //ctx . closePath ();
-      //ctx . fill (region); ctx . strokeStyle = this . border_colour; 
+      ctx . fill (region); ctx . strokeStyle = this . border_colour;
       ctx . stroke (region);
       //ctx . clip (region);
     }

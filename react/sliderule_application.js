@@ -234,7 +234,7 @@ window . addEventListener ('resize', positionInfoPanel);
 var drawSliderule = function () {
 	var width = window . innerWidth, height = window . innerHeight;
 	var bound = slideruleCanvas . getBoundingClientRect ();
-	var new_width = width - bound . left * 4, new_height = height - bound . top;
+	var new_width = width - bound . left * 4, new_height = height - bound . top * 1.3;
 	if (sliderules . fixedHeight) new_height = sliderules . fixedHeight;
 	if (previous_width !== new_width || previous_height !== new_height) {
 		slideruleCanvas . width = new_width;
@@ -242,13 +242,15 @@ var drawSliderule = function () {
 		previous_width = new_width;
 		previous_height = new_height;
 		sliderules . requireRedraw = true;
-		if (! sliderules . initialPositionSet) {
+		if (window . slideruleInitialPositionAtBottom && ! sliderules . initialPositionSet) {
 			var totalH = 0;
 			for (var ind in sliderules . sliderules) {
 				if (! sliderules . sliderules [ind] . inactive) totalH += sliderules . sliderules [ind] . height ();
 			}
-			sliderules . position . y = (new_height / sliderules . scale) - totalH;
-			sliderules . initialPositionSet = true;
+			if (totalH > 0) {
+				sliderules . position . y = (new_height / sliderules . scale) - totalH;
+				sliderules . initialPositionSet = true;
+			}
 		}
 		positionInfoPanel ();
 	}
