@@ -216,10 +216,25 @@ rootRootDiv . appendChild (slideruleCanvas);
 var ctx = slideruleCanvas . getContext ('2d');
 
 var previous_width = 0, previous_height = 0;
+var positionInfoPanel = function () {
+	var header = document . querySelector ('header.header');
+	var panel = document . querySelector ('.info-panel');
+	if (header && panel) {
+		var rect = header . getBoundingClientRect ();
+		panel . style . top = (rect . bottom) + 'px';
+	}
+};
+if (document . readyState === 'loading') {
+	document . addEventListener ('DOMContentLoaded', positionInfoPanel);
+} else {
+	positionInfoPanel ();
+}
+window . addEventListener ('resize', positionInfoPanel);
+
 var drawSliderule = function () {
 	var width = window . innerWidth, height = window . innerHeight;
 	var bound = slideruleCanvas . getBoundingClientRect ();
-	var new_width = width - bound . left * 4, new_height = height - bound . top * 1.5;
+	var new_width = width - bound . left * 4, new_height = height - bound . top;
 	if (sliderules . fixedHeight) new_height = sliderules . fixedHeight;
 	if (previous_width !== new_width || previous_height !== new_height) {
 		slideruleCanvas . width = new_width;
@@ -227,6 +242,15 @@ var drawSliderule = function () {
 		previous_width = new_width;
 		previous_height = new_height;
 		sliderules . requireRedraw = true;
+		if (! sliderules . initialPositionSet) {
+			var totalH = 0;
+			for (var ind in sliderules . sliderules) {
+				if (! sliderules . sliderules [ind] . inactive) totalH += sliderules . sliderules [ind] . height ();
+			}
+			sliderules . position . y = (new_height / sliderules . scale) - totalH;
+			sliderules . initialPositionSet = true;
+		}
+		positionInfoPanel ();
 	}
 	if (sliderules . noChange ()) {
 		if (sliderules . checkRequired) {slideruleObjective (); sliderules . checkRequired = false;}

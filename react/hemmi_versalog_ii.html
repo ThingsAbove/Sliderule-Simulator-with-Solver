@@ -54,7 +54,7 @@
       .header .static select { padding: 0.25rem 0.35rem; border: 1px solid #adb5bd; border-radius: 3px; font-size: 11px; min-width: 140px; max-width: 180px; background: #fff; }
       .header .static .btn { padding: 0.25rem 0.4rem; border: 1px solid #ced4da; border-radius: 3px; background: #fff; font-size: 11px; cursor: pointer; }
       .header .static .btn:hover { background: #e9ecef; }
-      .info-panel { position: fixed; background: #fff; border: 1px solid #dee2e6; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 0.5rem 0.75rem; font-size: 13px; color: #c92a2a; }
+      .info-panel { position: fixed; top: 151px; left: 12px; z-index: 10; background: #fff; border: 1px solid #dee2e6; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 0.5rem 0.75rem; font-size: 13px; color: #c92a2a; max-width: 40%; }
       .info-panel span { display: block; }
     </style>
   </head>
@@ -117,8 +117,9 @@
     </section>
   </div>
 </header>
-<div class="info-panel"><span id="info"></span></div>
-<div id="root"></div>
+<div class="info-panel"><span id="info"> 
+</span></div>
+<div id="root"><br></div>
 
 <script src="sliderule_construction_kit.js"></script>
 <script src="scales.js"></script>
