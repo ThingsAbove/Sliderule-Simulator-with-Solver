@@ -9,6 +9,7 @@
 
   var evaluate = window.equation_parser && window.equation_parser.evaluate;
   var parseEquation = window.equation_parser && window.equation_parser.parseEquation;
+  var profile = window.hemmiRuleProfile || { hasA: true, scaleL: 'LogX     L' };
 
   function toMantissa(x) {
     if (x === 0) return { m: 1, exp: -100 };
@@ -61,6 +62,8 @@
     var lastWasBack = false;
     var lastResultOnD = true;
     var lastWasFinalSqrt = false;
+    /** After sqrt on R1/R2 (no A scale), cursor does not "hold" the value; next multiply must re-enter it. */
+    var lastResultFromRScale = false;
 
     // ——— Rule book: body limits, scale positions, division/mult and index choice ———
     var limitL = 0.03;
@@ -202,12 +205,23 @@
         });
         lastWasBack = false;
       }
-      var a = currentMantissa;
-      var b = op.right;
+      var a, b, cursorCVal, firstFactor, afterRScaleSqrt = false;
+      if (lastResultFromRScale && !profile.hasA) {
+        afterRScaleSqrt = true;
+        lastResultFromRScale = false;
+        firstFactor = op.left;
+        a = firstFactor;
+        b = currentMantissa;
+        cursorCVal = currentMantissa;
+      } else {
+        a = currentMantissa;
+        b = op.right;
+        cursorCVal = toMantissa(b).m;
+        firstFactor = a;
+      }
       var manB = toMantissa(b);
       var prod = op.result;
       var manProd = toMantissa(prod);
-      var cursorCVal = manB.m;
       var prodMsg = crnu(prod, 5);
       currentMantissa = manProd.m;
       currentExp = currentExp + manB.exp;
@@ -224,8 +238,8 @@
       } else {
         useCF = true;
       }
-      var firstFactor = a;
       var cIndex = useRightIndex ? 10 : 1;
+      var rScaleReadRounded = afterRScaleSqrt ? crnu(cursorCVal, 3) : null;
       if (useCF) {
         steps.push({ action: function () { undimScales(['CF', 'DF']); changeMarkings('hairline', true); }, delay: 500 });
         steps.push({ action: function () { message('Second factor ' + crnu(cursorCVal, 5) + ' would be off C; use folded scales. Set cursor to ' + crnu(firstFactor, 5) + ' on DF, align index on CF, then cursor to ' + crnu(cursorCVal, 5) + ' on CF and read product on DF.'); }, delay: delayMsg });
@@ -239,18 +253,21 @@
         steps.push({ action: function () { message('Read intermediate result ' + prodMsg + ' on DF.'); }, delay: delayMsg });
       } else {
         steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () {
-          message(useRightIndex ? 'Move the slide so the right index (10) on C is over ' + crnu(firstFactor, 5) + ' on the D scale.' : 'Move the slide so the left index (1) on C is over ' + crnu(firstFactor, 5) + ' on the D scale.');
-        }, delay: delayMsg });
+        var msgSetSlide = (useRightIndex ? 'Move the slide so the right index (10) on C is over ' : (afterRScaleSqrt ? 'Set the first factor: move the slide so the left index (1) on C is over ' : 'Move the slide so the left index (1) on C is over ')) + crnu(firstFactor, 5) + ' on the D scale.';
+        var msgCursor = rScaleReadRounded
+          ? ('Move the cursor to ' + rScaleReadRounded + ' on the C scale (the value you read from the R scale).')
+          : ('Move the cursor to ' + crnu(cursorCVal, 5) + ' on the C scale.');
+        steps.push({ action: function () { message(msgSetSlide); }, delay: delayMsg });
         steps.push({ action: function () {
           if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
           ensureSide(['C', 'D']);
           cursorTo('D', firstFactor);
         }, delay: delayAction });
         steps.push({ action: function () { slideTo('C', cIndex); }, delay: delayAction });
-        steps.push({ action: function () { message('Move the cursor to ' + crnu(cursorCVal, 5) + ' on the C scale.'); }, delay: delayMsg });
+        steps.push({ action: function () { message(msgCursor); }, delay: delayMsg });
         steps.push({ action: function () { cursorTo('C', cursorCVal); }, delay: delayAction });
-        steps.push({ action: function () { message('Read intermediate result ' + prodMsg + ' on D.' + (useRightIndex ? ' (Adjust decimal: result is ' + prodMsg + '.)' : '')); }, delay: delayMsg });
+        var readMsg = afterRScaleSqrt ? ('Read result ' + crnu(prod, 3) + ' on D.') : ('Read intermediate result ' + prodMsg + ' on D.' + (useRightIndex ? ' (Adjust decimal: result is ' + prodMsg + '.)' : ''));
+        steps.push({ action: function () { message(readMsg); }, delay: delayMsg });
       }
     }
 
@@ -371,22 +388,46 @@
       currentMantissa = manResult.m;
       if (exp === 2) {
         ensureFront();
-        steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
-        steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () { message('Square: cursor to ' + crnu(manBase.m, 5) + ' on D, read ' + crnu(result, 5) + ' on A.'); }, delay: delayMsg });
-        steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
-        steps.push({ action: function () { message('Read result on A scale: ' + crnu(result, 5)); }, delay: delayMsg });
+        if (profile.hasA) {
+          steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+          steps.push({ action: function () { message('Square: cursor to ' + crnu(manBase.m, 5) + ' on D, read ' + crnu(result, 5) + ' on A.'); }, delay: delayMsg });
+          steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
+          steps.push({ action: function () { message('Read result on A scale: ' + crnu(result, 5)); }, delay: delayMsg });
+        } else {
+          var nDigitsSq = digitsLeftOfDecimal(result);
+          var useR1Sq = (nDigitsSq % 2 === 1);
+          var rScaleSq = useR1Sq ? 'R1' : 'R2';
+          var rHintSq = useR1Sq ? 'Odd number of digits in result → use R1.' : 'Even number of digits in result → use R2.';
+          steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.front = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+          steps.push({ action: function () { message('Square: cursor to ' + crnu(manBase.m, 5) + ' on D, read ' + crnu(result, 5) + ' on ' + rScaleSq + '. ' + rHintSq); }, delay: delayMsg });
+          steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
+          steps.push({ action: function () { message('Read result on ' + rScaleSq + ' scale: ' + crnu(result, 5)); }, delay: delayMsg });
+        }
         currentExp = currentExp * 2;
         lastResultOnD = false;
       } else if (exp === 0.5) {
         ensureFront();
-        var half = squareRootHalf(base);
-        var aVal = half === 'left' ? manBase.m : manBase.m * 10;
-        steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
-        steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () { message('Square root: use ' + half + ' half of A (exponent ' + (half === 'left' ? 'even' : 'odd') + '). Cursor to ' + crnu(base, 5) + ' on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
-        steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
-        steps.push({ action: function () { message('Read result on D scale: ' + crnu(result, 5)); }, delay: delayMsg });
+        if (profile.hasA) {
+          var half = squareRootHalf(base);
+          var aVal = half === 'left' ? manBase.m : manBase.m * 10;
+          steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+          steps.push({ action: function () { message('Square root: use ' + half + ' half of A (exponent ' + (half === 'left' ? 'even' : 'odd') + '). Cursor to ' + crnu(base, 5) + ' on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+          steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
+          steps.push({ action: function () { message('Read result on D scale: ' + crnu(result, 5)); }, delay: delayMsg });
+        } else {
+          var nDigitsSqrtPow = digitsLeftOfDecimal(base);
+          var useR1SqrtPow = (nDigitsSqrtPow % 2 === 1);
+          var rScaleSqrtPow = useR1SqrtPow ? 'R1' : 'R2';
+          var rHintSqrtPow = useR1SqrtPow ? 'Odd number of digits to the left of the decimal → use R1.' : 'Even number of digits to the left of the decimal → use R2.';
+          steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.front = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+          steps.push({ action: function () { message('Square root of ' + crnu(base, 5) + ': use R scales. Set cursor on ' + crnu(manBase.m, 5) + ' on D, read ' + crnu(result, 5) + ' on ' + rScaleSqrtPow + '. ' + rHintSqrtPow); }, delay: delayMsg });
+          steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
+          steps.push({ action: function () { message('Result ' + crnu(result, 5) + ' on ' + rScaleSqrtPow + ' scale.'); }, delay: delayMsg });
+        }
         currentExp = Math.floor(currentExp / 2);
       } else if (exp === 3) {
         ensureFront();
@@ -433,7 +474,7 @@
           var resultMantD = toSigFigs(resultMantissaFromLog, 3);
           var resultD = toSigFigs(result, 3);
           var indexLabel = useRightIndex ? 'right index (10)' : 'left index (1)';
-          var lScaleName = 'LogX     L';
+          var lScaleName = profile.scaleL;
           ensureBack();
           steps.push({ action: function () { ensureSide([lScaleName, 'C', 'D']); sidesUsed.back = true; }, delay: 100 });
           steps.push({ action: function () { undimScales([lScaleName, 'C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
@@ -535,14 +576,29 @@
         lastWasFinalSqrt = true;
       } else {
         ensureFront();
-        var half = squareRootHalf(arg);
-        var aVal = half === 'left' ? manArg.m : manArg.m * 10;
-        steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
-        steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: function () { message('Square root of ' + crnu(arg, 5) + ': use ' + half + ' half of A. Cursor to value on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
-        steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
-        steps.push({ action: function () { message('Result ' + crnu(result, 5) + ' on D scale.'); }, delay: delayMsg });
-        lastResultOnD = true;
+        if (profile.hasA) {
+          var half = squareRootHalf(arg);
+          var aVal = half === 'left' ? manArg.m : manArg.m * 10;
+          steps.push({ action: function () { ensureSide(['A', 'D']); sidesUsed.front = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales(['A', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+          steps.push({ action: function () { message('Square root of ' + crnu(arg, 5) + ': use ' + half + ' half of A. Cursor to value on A, read ' + crnu(result, 5) + ' on D.'); }, delay: delayMsg });
+          steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
+          steps.push({ action: function () { message('Result ' + crnu(result, 5) + ' on D scale.'); }, delay: delayMsg });
+          lastResultOnD = true;
+        } else {
+          var nDigitsSqrt = digitsLeftOfDecimal(arg);
+          var useR1Sqrt = (nDigitsSqrt % 2 === 1);
+          var rScaleSqrt = useR1Sqrt ? 'R1' : 'R2';
+          var rHintSqrt = useR1Sqrt ? 'Odd number of digits to the left of the decimal → use R1.' : 'Even number of digits to the left of the decimal → use R2.';
+          var sqrtReadRounded = crnu(result, 3);
+          steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.front = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+          steps.push({ action: function () { message('Square root of ' + crnu(arg, 5) + ': use R scales. Set cursor on ' + crnu(manArg.m, 5) + ' on D, read ' + sqrtReadRounded + ' on ' + rScaleSqrt + '. ' + rHintSqrt); }, delay: delayMsg });
+          steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
+          steps.push({ action: function () { message('Result ' + sqrtReadRounded + ' on ' + rScaleSqrt + ' scale. The cursor is not a memory—you must re-enter this value on C or D for the next step.'); }, delay: delayMsg });
+          lastResultOnD = false;
+          lastResultFromRScale = true;
+        }
       }
     }
 
@@ -594,8 +650,8 @@
       var arg = op.arg;
       var result = op.result;
       ensureBack();
-      steps.push({ action: function () { ensureSide(['LogX     L', 'D']); sidesUsed.back = true; }, delay: 100 });
-      steps.push({ action: function () { undimScales(['LogX     L', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+      steps.push({ action: function () { ensureSide([profile.scaleL, 'D']); sidesUsed.back = true; }, delay: 100 });
+      steps.push({ action: function () { undimScales([profile.scaleL, 'D']); changeMarkings('hairline', true); }, delay: 500 });
       var manArg = toMantissa(arg);
       steps.push({ action: function () { message('Log10 of ' + crnu(arg, 5) + ': cursor to value on D, read on L.'); }, delay: delayMsg });
       steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
@@ -618,7 +674,7 @@
         var resultRead = (result >= 1 && result < 10) ? crnu(result, 3) : (result >= 0.1 && result < 1 ? crnu(result, 3) : (result >= 0.01 && result < 0.1 ? crnu(result, 4) : Number(result).toPrecision(3)));
         var rangeHint = (llScaleLabel === 'LL3') ? '1.0 to 10.0' : (llScaleLabel === 'LL2') ? '0.1 to 1.0' : '0.01 to 0.1';
         steps.push({ action: function () {
-          message('Natural log of ' + crnu(arg, 3) + ': On the Versalog II, the D scale and LL scales are aligned so ln(y) is read directly. Find ' + crnu(manArg.m, 3) + ' on the ' + llScaleLabel + ' scale.');
+          message('Natural log of ' + crnu(arg, 3) + ': On this rule, the D scale and LL scales are aligned so ln(y) is read directly. Find ' + crnu(manArg.m, 3) + ' on the ' + llScaleLabel + ' scale.');
         }, delay: delayMsg });
         steps.push({ action: function () { cursorTo(llScaleName, manArg.m); }, delay: delayAction });
         steps.push({ action: function () {
@@ -630,8 +686,8 @@
         lastResultOnD = true;
       } else {
         ensureBack();
-        steps.push({ action: function () { ensureSide(['LogX     L', 'D']); sidesUsed.back = true; }, delay: 100 });
-        steps.push({ action: function () { undimScales(['LogX     L', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+        steps.push({ action: function () { ensureSide([profile.scaleL, 'D']); sidesUsed.back = true; }, delay: 100 });
+        steps.push({ action: function () { undimScales([profile.scaleL, 'D']); changeMarkings('hairline', true); }, delay: 500 });
         steps.push({ action: function () { message('Natural log of ' + crnu(arg, 5) + ': cursor to value on D, read log10 on L. Then ln(x) = log10(x) × 2.303.'); }, delay: delayMsg });
         steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
         steps.push({ action: function () { message('Read log10 on L, then ln(x) = log10(x) × 2.303 = ' + crnu(result, 5)); }, delay: delayMsg });
