@@ -85,6 +85,9 @@
     }
 
     // ——— Rule book: body limits, scale positions, division/mult and index choice ———
+    // CI multiply: cursor at first factor on D, slide so second factor on CI is under cursor.
+    // Slide target = log10(a) + log10(b) - 1, so product a*b is at body position log10(a*b) = right index position. Result is always under the right index (10).
+    var CI_MULTIPLY_INDEX = 10;
     var limitL = 0.03;
     var limitR = 0.03;
     function positionC(shift, x) { return shift + Math.log10(x); }
@@ -267,13 +270,20 @@
       var useCI = resultWasOnD && !afterRScaleSqrt;
       if (useCI) {
         steps.push({ action: function () { undimScales(['C', 'D', 'CI']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: displayMessageWithExponent('First factor is already on D (under the cursor). Without moving the cursor, move the slide so ' + formatSigFig(cursorCVal, PREC) + ' on the CI scale is under the cursor. Read the product on D under the index.'), delay: delayMsg });
-        steps.push({ action: function () {
-          if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D', 'CI']) && typeof changeSide === 'function') changeSide('front');
-          ensureSide(['C', 'D', 'CI']);
-          slideTo('CI', cursorCVal);
-        }, delay: delayAction });
-        steps.push({ action: displayMessageWithExponent('Read intermediate result ' + prodMsg + ' on D.'), delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('First factor is already on D (under the cursor). Without moving the cursor, move the slide so ' + formatSigFig(cursorCVal, PREC) + ' on the CI scale is under the cursor. Read the product on D under the right index (10).'), delay: delayMsg });
+        steps.push({
+          action: (function (tVal, cVal) {
+            return function () {
+              if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D', 'CI']) && typeof changeSide === 'function') changeSide('front');
+              ensureSide(['C', 'D', 'CI']);
+              cursorTo('D', tVal);
+              slideTo('CI', cVal);
+              cursorTo('C', CI_MULTIPLY_INDEX);
+            };
+          })(transferVal, cursorCVal),
+          delay: delayAction
+        });
+        steps.push({ action: displayMessageWithExponent('Read intermediate result ' + prodMsg + ' on D under the right index.'), delay: delayMsg });
       } else if (useCF) {
         steps.push({ action: function () { undimScales(['CF', 'DF']); changeMarkings('hairline', true); }, delay: 500 });
         steps.push({ action: displayMessageWithExponent('Second factor ' + formatSigFig(cursorCVal, PREC) + ' would be off C; use folded scales. Set cursor to ' + formatSigFig(firstFactor, PREC) + ' on DF, align index on CF, then cursor to ' + formatSigFig(cursorCVal, PREC) + ' on CF and read product on DF.'), delay: delayMsg });

@@ -243,7 +243,7 @@ window . addEventListener ('resize', positionInfoPanel);
 var drawSliderule = function () {
 	var width = window . innerWidth, height = window . innerHeight;
 	var bound = slideruleCanvas . getBoundingClientRect ();
-	var new_width = width - bound . left * 4, new_height = height - bound . top * 1.25;
+	var new_width = width - bound . left * 4, new_height = height - bound . top * 1.3;
 	if (sliderules . fixedHeight) new_height = sliderules . fixedHeight;
 	if (previous_width !== new_width || previous_height !== new_height) {
 		slideruleCanvas . width = new_width;
