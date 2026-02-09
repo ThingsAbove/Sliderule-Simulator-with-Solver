@@ -222,6 +222,18 @@ var slideruleCanvas = document . createElement ('canvas');
 slideruleCanvas . id = 'sliderule_canvas';
 rootRootDiv . appendChild (slideruleCanvas);
 
+var copyrightContainer = document . createElement ('div');
+copyrightContainer . setAttribute ('style', 'display: flex; justify-content: space-between; padding-top: 5px; font-size: 10px;');
+var copyrightDivLeft = document . createElement ('div');
+copyrightDivLeft . setAttribute ('style', 'padding-left: 5px; color: ' + copyright_colour + ';');
+copyrightDivLeft . textContent = 'Emulator Equation Solver Copyright 2026. Richard Carpenter, AA4OO@HamradioQRP.com';
+var copyrightDivRight = document . createElement ('div');
+copyrightDivRight . setAttribute ('style', 'padding-right: 5px; color: ' + copyright_colour + ';');
+copyrightDivRight . textContent = copyright;
+copyrightContainer . appendChild (copyrightDivLeft);
+copyrightContainer . appendChild (copyrightDivRight);
+rootRootDiv . appendChild (copyrightContainer);
+
 var ctx = slideruleCanvas . getContext ('2d');
 
 var previous_width = 0, previous_height = 0;
