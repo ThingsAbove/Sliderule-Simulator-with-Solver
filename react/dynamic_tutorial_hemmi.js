@@ -240,10 +240,10 @@
       if (lastResultFromRScale && !profile.hasA) {
         afterRScaleSqrt = true;
         lastResultFromRScale = false;
-        firstFactor = op.left;
+        firstFactor = currentMantissa;
         a = firstFactor;
-        b = currentMantissa;
-        cursorCVal = currentMantissa;
+        b = op.right;
+        cursorCVal = toMantissa(b).m;
       } else {
         a = currentMantissa;
         b = op.right;
@@ -287,7 +287,7 @@
       }
       exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp + (useRightIndex ? ' + 1 (index shift: slide left)' : '');
       var cIndex = useRightIndex ? 10 : 1;
-      var rScaleReadRounded = afterRScaleSqrt ? formatSigFig(cursorCVal, PREC_FINAL) : null;
+      var rScaleCursorMsg = afterRScaleSqrt ? ('Move the cursor to ' + formatSigFig(cursorCVal, PREC_FINAL) + ' on the C scale (the second factor).') : null;
       var useCI = resultWasOnD && !afterRScaleSqrt;
       if (useCI) {
         lastMultiplyWasCI = true;
@@ -325,9 +325,7 @@
         lastMultiplyWasCI = false;
         steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
         var msgSetSlide = (useRightIndex ? 'Move the slide so the right index (10) on C is over ' : (afterRScaleSqrt ? 'Set the first factor: move the slide so the left index (1) on C is over ' : 'Move the slide so the left index (1) on C is over ')) + formatSigFig(firstFactor, PREC) + ' on the D scale.';
-        var msgCursor = rScaleReadRounded
-          ? ('Move the cursor to ' + rScaleReadRounded + ' on the C scale (the value you read from the R scale).')
-          : ('Move the cursor to ' + formatSigFig(cursorCVal, PREC) + ' on the C scale.');
+        var msgCursor = rScaleCursorMsg || ('Move the cursor to ' + formatSigFig(cursorCVal, PREC) + ' on the C scale.');
         steps.push({ action: displayMessageWithExponent(msgSetSlide), delay: delayMsg });
         steps.push({ action: function () {
           if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
@@ -345,9 +343,11 @@
     // Division: CI/CIF shortcut only when cursor is AT THE INDEX (result under index).
     // After using CI/CIF, cursor is over the quotient on D (not at index); next division must move the slide.
     function stepDivide(op, divisionIndexInChain, inDivisionChain, chainSlideShift, cursorAtIndex) {
+      var divisor = op.right;
+      var dividend = (op.left != null && op.left !== undefined) ? toMantissa(op.left).m : currentMantissa;
       if (lastWasBack) {
         ensureFront();
-        var transferVal = currentMantissa;
+        var transferVal = dividend;
         steps.push({
           action: (function (_exp, _reason) {
             return function () {
@@ -369,8 +369,6 @@
         });
         lastWasBack = false;
       }
-      var dividend = currentMantissa;
-      var divisor = op.right;
       var manDiv = toMantissa(divisor);
       var quot = op.result;
       var manQuot = toMantissa(quot);
@@ -767,9 +765,9 @@
         steps.push({ action: function () { undimScales([llScaleName, 'D']); changeMarkings('hairline', true); }, delay: 500 });
         var resultRead = formatSigFig(result, PREC_FINAL);
         var rangeHint = (llScaleLabel === 'LL3') ? '1.0 to 10.0' : (llScaleLabel === 'LL2') ? '0.1 to 1.0' : '0.01 to 0.1';
-        steps.push({ action: displayMessageWithExponent('Natural log of ' + formatSigFig(arg, PREC) + ': On this rule, the D scale and LL scales are aligned so ln(y) is read directly. Find ' + formatSigFig(manArg.m, PREC) + ' on the ' + llScaleLabel + ' scale.'), delay: delayMsg });
-        steps.push({ action: function () { cursorTo(llScaleName, manArg.m); }, delay: delayAction });
-        steps.push({ action: displayMessageWithExponent('Place the hairline over ' + formatSigFig(manArg.m, PREC) + ' on ' + llScaleLabel + '. Read the digits under the cursor on the D scale. ' + llScaleLabel + ' gives ln between ' + rangeHint + ', so ln(' + formatSigFig(arg, PREC) + ') = ' + resultRead + '.'), delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Natural log of ' + formatSigFig(arg, PREC) + ': On this rule, the D scale and LL scales are aligned so ln(y) is read directly. Find ' + formatSigFig(arg, PREC) + ' on the ' + llScaleLabel + ' scale.'), delay: delayMsg });
+        steps.push({ action: function () { cursorTo(llScaleName, arg); }, delay: delayAction });
+        steps.push({ action: displayMessageWithExponent('Place the hairline over ' + formatSigFig(arg, PREC) + ' on ' + llScaleLabel + '. Read the digits under the cursor on the D scale. ' + llScaleLabel + ' gives ln between ' + rangeHint + ', so ln(' + formatSigFig(arg, PREC) + ') = ' + resultRead + '.'), delay: delayMsg });
         currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
         if (currentMantissa >= 10) currentMantissa /= 10;
         currentExp = result !== 0 && isFinite(result) ? Math.floor(Math.log10(Math.abs(result))) : 0;
