@@ -63,6 +63,12 @@ var changeSide = function (side) {
 	default: if (sliderules . sliderules [1] . position . y === 60) sliderules . sliderules [1] . position . y = 0; break;
 	}
 	sliderules . requireRedraw = true;
+	var visibleFront = document . getElementById ('visible_front');
+	var visibleBack = document . getElementById ('visible_back');
+	var visibleBoth = document . getElementById ('visible_both');
+	if (visibleFront) visibleFront . checked = (side === 'front');
+	if (visibleBack) visibleBack . checked = (side === 'back');
+	if (visibleBoth) visibleBoth . checked = (side === 'both');
 };
 
 var changeSize = function (length) {for (var ind in sliderules . sliderules) sliderules . sliderules [ind] . length = length; sliderules . requireRedraw = true;};
@@ -97,6 +103,9 @@ var changeMovementSpeed = function (speed) {
 };
 
 var ProcessKey = function (e) {
+	var active = document . activeElement;
+	var tag = active && active . tagName ? active . tagName . toLowerCase () : '';
+	if (active && (tag === 'input' || tag === 'textarea' || active . isContentEditable)) return;
 	switch (e . key . toUpperCase ()) {
 	case 'B': var d = document . getElementById ('on_static_markings'); if (d) {d . checked = ! d . checked; changeStaticMarkings (d . checked);} break;
 	case 'S': var d = document . getElementById ('on_side'); if (d) {d . checked = ! d . checked; changeMarkings ('stator', d . checked);} break;
@@ -234,7 +243,7 @@ window . addEventListener ('resize', positionInfoPanel);
 var drawSliderule = function () {
 	var width = window . innerWidth, height = window . innerHeight;
 	var bound = slideruleCanvas . getBoundingClientRect ();
-	var new_width = width - bound . left * 4, new_height = height - bound . top * 1.25;
+	var new_width = width - bound . left * 4, new_height = height - bound . top * 1.4;
 	if (sliderules . fixedHeight) new_height = sliderules . fixedHeight;
 	if (previous_width !== new_width || previous_height !== new_height) {
 		slideruleCanvas . width = new_width;

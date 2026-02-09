@@ -237,10 +237,19 @@ var dimm = function (intensity) {
   sliderules . requireRedraw = true;
 };
 
+var scaleLabelMatches = function (scaleLeft, name) {
+  if (scaleLeft == name) return true;
+  if (typeof scaleLeft !== 'string') return false;
+  var t = scaleLeft . trim ();
+  if (t === name) return true;
+  var parts = t . split (/\s+/) . filter (Boolean);
+  return parts . length > 0 && parts [parts . length - 1] === name;
+};
+
 var hasScale = function (sliderule, name) {
   for (var rule in sliderule . rules) {
     for (var scale in sliderule . rules [rule] . scales) {
-      if (sliderule . rules [rule] . scales [scale] . left == name) return true;
+      if (scaleLabelMatches (sliderule . rules [rule] . scales [scale] . left, name)) return true;
     }
   }
   return false;
@@ -270,6 +279,11 @@ var ensureSide = function (names) {
     if (hasScales (sliderules . sliderules [ind], names)) {
       sliderules . sliderules [ind] . inactive = false;
       sliderules . requireRedraw = true;
+      if (typeof changeSide === 'function') {
+        changeSide(Number(ind) === 1 ? 'back' : 'front');
+      } else if (sliderules . sliderules [1] && sliderules . sliderules [1] . position) {
+        sliderules . sliderules [1] . position . y = 0;
+      }
       return;
     }
   }
@@ -283,7 +297,7 @@ var cursorTo = function (name, value) {
         var rule = sliderule . rules [r];
         for (var s in rule . scales) {
           var scale = rule . scales [s];
-          if (scale . left == name) {
+          if (scaleLabelMatches (scale . left, name)) {
             var target = scale . location (value) + rule . target;
             for (var tss in sliderules . sliderules) sliderules . sliderules [tss] . cursor_target = target;
             sliderules . requireRedraw = true;
@@ -307,7 +321,7 @@ var slideTo = function (name, value) {
         if (rule . stator != 0) {
           for (var s in rule . scales) {
             var scale = rule . scales [s];
-            if (scale . left == name) {
+            if (scaleLabelMatches (scale . left, name)) {
               target = sliderule . cursor_target - scale . location (value);
               rule . target = target;
               slideToPosition (target);
@@ -343,7 +357,7 @@ var getSlideTarget = function (name) {
         if (rule . stator != 0) {
           for (var s in rule . scales) {
             var scale = rule . scales [s];
-            if (scale . left == name) return rule . target;
+            if (scaleLabelMatches (scale . left, name)) return rule . target;
           }
         }
       }
@@ -360,7 +374,7 @@ var readValue = function (name) {
         var rule = sliderule . rules [r];
         for (var s in rule . scales) {
           var scale = rule . scales [s];
-          if (scale . left == name) {
+          if (scaleLabelMatches (scale . left, name)) {
             return scale . value (sliderule . cursor_target - rule . target);
           }
         }
@@ -378,7 +392,7 @@ var readLocation = function (name, value) {
         var rule = sliderule . rules [r];
         for (var s in rule . scales) {
           var scale = rule . scales [s];
-          if (scale . left == name) {
+          if (scaleLabelMatches (scale . left, name)) {
             if (value == undefined) return sliderule . cursor_target - rule .target;
             return scale . location (value);
           }

@@ -54,8 +54,9 @@
       .header .static select { padding: 0.25rem 0.35rem; border: 1px solid #adb5bd; border-radius: 3px; font-size: 11px; min-width: 140px; max-width: 180px; background: #fff; }
       .header .static .btn { padding: 0.25rem 0.4rem; border: 1px solid #ced4da; border-radius: 3px; background: #fff; font-size: 11px; cursor: pointer; }
       .header .static .btn:hover { background: #e9ecef; }
-      .info-panel { position: fixed; top: 151px; left: 12px; z-index: 10; background: #fff; border: 1px solid #dee2e6; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 0.5rem 0.75rem; font-size: 13px; color: #c92a2a; max-width: 40%; }
-      .info-panel span { display: block; }
+      .info-panel { position: fixed; top: 151px; left: 0; right: 0; z-index: 10; background: transparent; padding: 0.5rem 0.75rem; font-size: 13px; color: #c92a2a; overflow-y: auto; pointer-events: none; }
+      .info-panel span { display: block; text-shadow: 0 0 2px #fff, 0 0 4px #fff, 0 1px 2px rgba(0,0,0,0.3); }
+      .info-panel.hidden { display: none; }
     </style>
   </head>
 <body onkeydown = "javascript: ProcessKey (event);">
@@ -113,6 +114,8 @@
       </div>
       <div class="row">
         <button type="button" class="btn" id="clear_instructions" onclick="javascript: document.getElementById('info').innerHTML='';">Clear</button>
+        <button type="button" class="btn" id="copy_instructions" onclick="javascript: var el=document.getElementById('info'); var t=el?(el.innerText||el.textContent||''):''; if(!t&&el&&el.innerHTML){ t=el.innerHTML.replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,''); } if(t){ navigator.clipboard&&navigator.clipboard.writeText(t).then(function(){ var b=document.getElementById('copy_instructions'); if(b){ var old=b.textContent; b.textContent='Copied!'; setTimeout(function(){ b.textContent=old; },1200); } }); }">Copy instructions</button>
+        <button type="button" class="btn" id="toggle_info_panel" onclick="javascript: var p=document.querySelector('.info-panel'); var b=document.getElementById('toggle_info_panel'); if(p.classList.contains('hidden')){ p.classList.remove('hidden'); b.textContent='Hide panel'; } else { p.classList.add('hidden'); b.textContent='Show panel'; }">Hide panel</button>
       </div>
     </section>
   </div>
