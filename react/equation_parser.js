@@ -1,6 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////////
 // Equation parser for slide-rule dynamic tutorials.
-// Grammar: expression without + or - ; * / ^ and functions sqrt, sin, cos, tan, log, ln; pi, e.
+// Grammar: expression without + or - (except - allowed only after ^ for negative exponent); * / ^ and functions sqrt, sin, cos, tan, log, ln; pi, e.
 // Returns AST or { error: true, message, start, end } for problem-area display.
 ///////////////////////////////////////////////////////////////////////////////////
 
@@ -46,7 +46,7 @@
       start = i;
       var c = s[i];
       if (c === '+') return { error: true, message: 'Addition is not supported on a slide rule', start: start, end: i + 1 };
-      if (c === '-') return { error: true, message: 'Subtraction is not supported on a slide rule', start: start, end: i + 1 };
+      if (c === '-') { tokens.push({ type: '-', start: start, end: i + 1 }); i++; continue; }
       if (c === '*' && i + 1 < n && s[i + 1] === '*') { tokens.push({ type: '^', start: i, end: i + 2 }); i += 2; continue; }
       if (c === '*') { tokens.push({ type: '*', start: i, end: i + 1 }); i++; continue; }
       if (c === '/') { tokens.push({ type: '/', start: i, end: i + 1 }); i++; continue; }
@@ -91,15 +91,27 @@
       return { error: true, message: msg, start: start, end: end };
     }
 
+    function parseExponent() {
+      var minusTok = consume('-');
+      if (minusTok) {
+        var right = parseTerm();
+        if (right && right.error) return right;
+        if (!right) return error('Missing exponent after -');
+        return { type: 'unary_minus', arg: right, start: minusTok.start, end: right.end };
+      }
+      return parseTerm();
+    }
+
     function parseExpr() {
       var left = parseTerm();
       if (left && left.error) return left;
       if (!left) return null;
       while (peek() && (peek().type === '*' || peek().type === '/' || peek().type === '^')) {
         var opTok = consume();
-        var right = parseTerm();
+        var right = (opTok.type === '^') ? parseExponent() : parseTerm();
         if (right && right.error) return right;
         if (!right) return error('Missing expression after ' + opTok.type);
+        if (peek() && peek().type === '-') return error('Minus is only allowed in the exponent (e.g. 10^-3)', peek().start, peek().end);
         left = { type: 'binary', op: opTok.type, left: left, right: right, start: left.start, end: right.end };
       }
       return left;
@@ -135,6 +147,7 @@
         if (!consume(')')) return error('Expected )', inner.end, (peek() && peek().start) || s.length);
         return inner;
       }
+      if (peek() && peek().type === '-') return error('Minus is only allowed in the exponent (e.g. 10^-3)', peek().start, peek().end);
       if (pos < tokens.length) return error('Expected number, function, or (', peek().start, peek().end);
       return null;
     }
@@ -142,7 +155,7 @@
     var ast = parseExpr();
     if (ast && ast.error) return ast;
     if (!ast) return error('Empty or invalid expression', 0, s.length);
-    if (peek()) return error('Unexpected token', peek().start, peek().end);
+    if (peek()) return error(peek().type === '-' ? 'Minus is only allowed in the exponent (e.g. 10^-3)' : 'Unexpected token', peek().start, peek().end);
     return ast;
   }
 
@@ -150,6 +163,10 @@
     if (!ast) return NaN;
     if (ast.type === 'number') return ast.value;
     if (ast.type === 'name') return ast.value;
+    if (ast.type === 'unary_minus') {
+      var v = evaluate(ast.arg);
+      return v !== v ? NaN : -v;
+    }
     if (ast.type === 'binary') {
       var a = evaluate(ast.left);
       var b = evaluate(ast.right);
@@ -177,6 +194,7 @@
 
   function checkDivisionByZero(ast) {
     if (!ast) return null;
+    if (ast.type === 'unary_minus') return checkDivisionByZero(ast.arg);
     if (ast.type === 'binary' && ast.op === '/') {
       var r = evaluate(ast.right);
       if (r === 0) return { error: true, message: 'Division by zero', start: ast.right.start, end: ast.right.end };

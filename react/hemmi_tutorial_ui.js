@@ -14,7 +14,7 @@
     errEl.innerHTML = '';
     areaEl.innerHTML = '';
     if (!eq) {
-      errEl.textContent = 'Enter an equation (e.g. 2*3/4 or sqrt(16)).';
+      errEl.textContent = 'Enter an equation (e.g. 2*3/4, sqrt(16), or 10^-3).';
       return;
     }
     var parsed = equation_parser.parseEquation(eq);
