@@ -80,7 +80,7 @@
     <section class="dynamic">
       <h3>Equation</h3>
       <div class="row">
-        <input type="text" id="equation_input" placeholder="e.g. 2.5*3/1.5 or sqrt(16)" />
+        <input type="text" id="equation_input" placeholder="e.g. 2.5*3/1.5, sqrt(16), or 10^-3" />
         <button type="button" class="btn btn-primary" onclick="javascript: onGenerateDynamicTutorial();">Generate</button>
         <button type="button" class="btn" onclick="javascript: onReplayDynamicTutorial();">Replay</button>
       </div>
@@ -96,9 +96,9 @@
       <details class="help">
         <summary>Format help</summary>
         <div class="help-content">
-          Use <code>*</code> <code>/</code> <code>^</code> only (no + or −). Numbers and spaces allowed.<br/>
+          Use <code>*</code> <code>/</code> <code>^</code> only (no + or −). Numbers and spaces allowed. Negative exponent allowed after <code>^</code> (e.g. <code>10^-3</code>).<br/>
           Functions: <code>sqrt(x)</code> <code>sin(x)</code> <code>cos(x)</code> <code>tan(x)</code> <code>log(x)</code> <code>ln(x)</code> — angles in degrees.<br/>
-          Examples: <code>2*3/4</code> <code>sqrt(6)*3</code> <code>log(sqrt(4))*2.22</code> <code>sin(30)*2</code>
+          Examples: <code>2*3/4</code> <code>sqrt(6)*3</code> <code>10^-3</code> <code>2.5*10^-3</code> <code>log(sqrt(4))*2.22</code> <code>sin(30)*2</code>
         </div>
       </details>
     </section>
