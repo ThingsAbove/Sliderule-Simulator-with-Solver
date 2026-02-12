@@ -341,7 +341,23 @@ var slideToPosition = function (position) {
       var rrule = sliderules . sliderules [tss] . rules [tr];
       if (rrule . stator != 0) {
         rrule . target = position;
+        rrule . shift = position;
       }
+    }
+  }
+  sliderules . requireRedraw = true;
+};
+
+/** Reset all rules (slide and body) and cursor to 0 so lessons and tutorials start from a known state. */
+var resetSlidePosition = function () {
+  var tss, tr, rrule, sr;
+  for (tss in sliderules . sliderules) {
+    sr = sliderules . sliderules [tss];
+    if (sr . cursor_target !== undefined) { sr . cursor_target = 0; sr . cursor_position = 0; }
+    for (tr in sr . rules) {
+      rrule = sr . rules [tr];
+      rrule . target = 0;
+      rrule . shift = 0;
     }
   }
   sliderules . requireRedraw = true;
@@ -492,7 +508,15 @@ var playLesson = function (lessons, info) {
 	var lesson_id = document . getElementById (lessons) . value;
 	for (var ind in slideruleLessons) {
 		var lesson = slideruleLessons [ind] [lesson_id];
-		if (lesson != null) {sequencer (lesson (lessonMessage)); return;}
+		if (lesson != null) {
+			var steps = lesson (lessonMessage);
+			// Prepend a reset step so the slide/body/cursor are zeroed before the first lesson step runs.
+			if (typeof resetSlidePosition === 'function' && steps && steps . length) {
+				steps = [{ action: function () { resetSlidePosition (); }, delay: 0 }] . concat (steps);
+			}
+			sequencer (steps);
+			return;
+		}
 	}
 	alert ("Scenario [" + lesson_id + "] not found.");
 };
