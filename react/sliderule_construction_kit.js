@@ -2347,7 +2347,7 @@ var Sliderule = function (length, options) {
     var y = 0;
     ctx . textBaseline = 'middle';
     ctx . font = this . markings_size + 'px arial';
-    var h; var hh; var description; var measure; var rs; var scaleLeft; var hl; var elapsed; var showGreen; var textColour;
+    var h; var hh; var description; var measure; var rs; var scaleLeft; var hl; var textColour;
     for (var ind in this . rules) {
       for (var sub in this . rules [ind] . scales) {
         h = this . rules [ind] . scales [sub] . height * this . rules [ind] . v_scaling;
@@ -2357,16 +2357,8 @@ var Sliderule = function (length, options) {
         else description = this . rules [ind] . scales [sub] . display (this . cursor_position - this . rules [ind] . shift, this . precision);
         if (description !== null) {
           hl = window . slideruleResultHighlight;
-          showGreen = false;
-          if (hl && hl . mode && hl . scale === scaleLeft) {
-            elapsed = Date . now () - (hl . startedAt || 0);
-            if (hl . mode === 'blink_twice') {
-              showGreen = (elapsed < 400) || (elapsed >= 600 && elapsed < 1000);
-            } else if (hl . mode === 'continuous') {
-              showGreen = (Math . floor (elapsed / 500) % 2) === 0;
-            }
-          }
-          textColour = showGreen ? '#0a0' : (hl && hl . mode && hl . scale === scaleLeft ? this . markings_background : this . markings_colour);
+          if (hl && hl . scale === scaleLeft) textColour = '#0a0';
+          else textColour = this . markings_colour;
           ctx . fillStyle = this . markings_background;
           measure = ctx . measureText (description);
           ctx . textAlign = align;

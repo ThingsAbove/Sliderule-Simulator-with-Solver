@@ -436,10 +436,14 @@ var checkValue = function (name, value, tolerance) {
 }
 
 var sequencerTimeout = null;
-var resultHighlightTimeout = null;
 window . slideruleResultHighlight = window . slideruleResultHighlight || { scale: null, value: null, mode: null, startedAt: 0 };
 var clearResultHighlight = function () {
-  if (window . slideruleResultHighlight) window . slideruleResultHighlight . mode = null;
+  if (window . slideruleResultHighlight) {
+    window . slideruleResultHighlight . scale = null;
+    window . slideruleResultHighlight . value = null;
+    window . slideruleResultHighlight . mode = null;
+    window . slideruleResultHighlight . startedAt = 0;
+  }
   if (typeof sliderules !== 'undefined') sliderules . requireRedraw = true;
 };
 var setResultHighlight = function (scale, value, isFinal) {
@@ -447,9 +451,7 @@ var setResultHighlight = function (scale, value, isFinal) {
   window . slideruleResultHighlight . scale = scale;
   window . slideruleResultHighlight . value = value != null ? value : null;
   window . slideruleResultHighlight . startedAt = Date . now ();
-  window . slideruleResultHighlight . mode = isFinal ? 'continuous' : 'blink_twice';
-  if (resultHighlightTimeout) clearTimeout (resultHighlightTimeout);
-  if (! isFinal) resultHighlightTimeout = setTimeout (function () { clearResultHighlight (); resultHighlightTimeout = null; }, 1200);
+  window . slideruleResultHighlight . mode = isFinal ? 'final' : 'step';
   if (typeof sliderules !== 'undefined') sliderules . requireRedraw = true;
 };
 var sequencer = function (steps, index, onStep) {
@@ -491,7 +493,6 @@ var dynamicTutorialStepForward = function () {
   var s = dynamicTutorialState;
   if (! s . steps || s . index >= s . steps . length) return;
   clearTimeout (sequencerTimeout);
-  clearResultHighlight ();
   do {
     s . steps [s . index] . action ();
     if (s . steps [s . index] . resultScale != null) setResultHighlight (s . steps [s . index] . resultScale, s . steps [s . index] . resultValue, !! s . steps [s . index] . isFinalStep);
@@ -501,7 +502,6 @@ var dynamicTutorialStepForward = function () {
 var dynamicTutorialStepBack = function () {
   var s = dynamicTutorialState;
   clearTimeout (sequencerTimeout);
-  clearResultHighlight ();
   if (! s . steps || s . index <= 0) return;
   var prev = dynamicTutorialPrevVisibleIndex (s . steps, s . index);
   s . index = prev;

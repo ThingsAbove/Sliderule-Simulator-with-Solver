@@ -175,7 +175,7 @@
       ensureFront();
       var cIndex = (useRightIndex === true) ? 10 : 1;
       var indexLabel = (useRightIndex === true) ? 'right index (10)' : 'left index (1)';
-      var indexReason = (useRightIndex === true) ? ' (Product will be over 10; use right index so the result stays on the D scale.)' : '';
+      var indexReason = (useRightIndex === true) ? ' (Use the right index so later products stay on the D scale.)' : '';
       steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
       steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
       steps.push({ action: displayMessageWithExponent('First factor is ' + formatSigFig(v, PREC) + '. Move the slide so the ' + indexLabel + ' on C is over ' + formatSigFig(v, PREC) + ' on the D scale.' + indexReason), delay: delayMsg });
@@ -274,8 +274,6 @@
       var prodMsg = formatSigFig(prod, PREC_FINAL);
       currentMantissa = manProd.m;
       lastResultOnD = true;
-      currentExp = manProd.exp;
-      exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp;
       if (manB.m >= 0.9995 && manB.m <= 1.0005) {
         steps.push({ action: displayMessageWithExponent('Multiply by ' + formatSigFig(b, PREC) + ' (' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp + '): exponent only; no movement.'), delay: delayMsg });
         return;
@@ -285,6 +283,8 @@
         lastMultiplyWasCI = false;
         var productOnScale = (prod >= 1 && prod < 10);
         if (productOnScale) {
+          currentExp = manProd . exp;
+          exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp;
           steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
           steps.push({ action: displayMessageWithExponent('Result is under the index. Move the cursor to ' + formatSigFig(cursorCVal, PREC) + ' on the C scale. Read the product on D under the cursor.'), delay: delayMsg });
           steps.push({ action: function () {
@@ -307,13 +307,15 @@
       } else {
         useCF = true;
       }
-      exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp + (useRightIndex ? ' + 1 (index shift: slide left)' : '');
+      var nextExp = manProd . exp;
+      var nextReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp + (useRightIndex ? ' + 1 (index shift: slide left)' : '');
       var cIndex = useRightIndex ? 10 : 1;
       var rScaleCursorMsg = afterRScaleSqrt ? ('Move the cursor to ' + formatSigFig(cursorCVal, PREC_FINAL) + ' on the C scale (the second factor).') : null;
       var useCI = lastResultOnD && !afterRScaleSqrt;
       if (useCI && preferBack && profile.hasCIOnBack === false) useCI = false;
       if (useCI) {
         lastMultiplyWasCI = true;
+        currentExp = nextExp;
         exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp;
         var ciMultiplyIndex = whichIndexCIMultiply(firstFactor, cursorCVal);
         var ciIndexLabel = (ciMultiplyIndex === 10) ? 'right index (10)' : 'left index (1)';
@@ -347,6 +349,8 @@
         steps.push({ action: displayMessageWithExponent('Read intermediate result ' + prodMsg + ' on D under the ' + ciIndexLabel + '.'), delay: delayMsg, resultScale: 'D', resultValue: prodMsg });
       } else if (useCF) {
         lastMultiplyWasCI = false;
+        currentExp = nextExp;
+        exponentLogReason = nextReason;
         steps.push({ action: function () { undimScales(['CF', 'DF']); changeMarkings('hairline', true); }, delay: 500 });
         steps.push({ action: displayMessageWithExponent('Second factor ' + formatSigFig(cursorCVal, PREC) + ' would be off C; use folded scales. Set cursor to ' + formatSigFig(firstFactor, PREC) + ' on DF, align index on CF, then cursor to ' + formatSigFig(cursorCVal, PREC) + ' on CF and read product on DF.'), delay: delayMsg });
         steps.push({ action: function () {
@@ -363,6 +367,8 @@
         var msgSetSlide = (useRightIndex ? 'Move the slide so the right index (10) on C is over ' : (afterRScaleSqrt ? 'Set the first factor: move the slide so the left index (1) on C is over ' : 'Move the slide so the left index (1) on C is over ')) + formatSigFig(firstFactor, PREC) + ' on the D scale.';
         var msgCursor = rScaleCursorMsg || ('Move the cursor to ' + formatSigFig(cursorCVal, PREC) + ' on the C scale.');
         steps.push({ action: displayMessageWithExponent(msgSetSlide), delay: delayMsg });
+        currentExp = nextExp;
+        exponentLogReason = nextReason;
         steps.push({ action: function () {
           if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
           ensureSide(['C', 'D']);
