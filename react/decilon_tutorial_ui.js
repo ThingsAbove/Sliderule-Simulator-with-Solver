@@ -14,10 +14,20 @@
     errEl.innerHTML = '';
     areaEl.innerHTML = '';
     if (!eq) {
-      errEl.textContent = 'Enter an equation (e.g. 2*3/4, sqrt(16), or 10^-3).';
+      errEl.textContent = 'Enter an equation (e.g. 2*3/4, sqrt(16), 10^-3, or 1/x).';
       return;
     }
-    var parsed = equation_parser.parseEquation(eq);
+    var parseOptions = undefined;
+    var eqNorm = eq.replace(/\s/g, '');
+    if (eqNorm === '1/x') {
+      var xVal = (typeof readValue === 'function') ? readValue('D') : null;
+      if (xVal == null || xVal !== xVal || xVal === 0) {
+        errEl.textContent = 'Set a value on D first (e.g. run a calculation), then enter 1/x.';
+        return;
+      }
+      parseOptions = { variables: { x: xVal } };
+    }
+    var parsed = equation_parser.parseEquation(eq, parseOptions);
     if (parsed.error) {
       errEl.textContent = parsed.message;
       if (parsed.start != null && parsed.end != null && parsed.end > parsed.start) {
@@ -33,7 +43,7 @@
         if (infoEl) infoEl.innerHTML += (msg || '') + '<br />';
       };
     })(document.getElementById('info'));
-    var result = window.generateDynamicTutorial(eq, messageFn);
+    var result = window.generateDynamicTutorial(eq, messageFn, parseOptions);
     if (result.error) {
       errEl.textContent = result.message;
       return;

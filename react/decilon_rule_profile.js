@@ -7,6 +7,7 @@
       hasA: true,
       hasB: true,
       hasDI: true,
+      hasCIOnBack: false,
       scaleL: 'L',
       scaleNames: { R1: 'Sq1', R2: 'Sq2', K: 'K' }
     }

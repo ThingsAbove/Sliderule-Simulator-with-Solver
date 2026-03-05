@@ -82,7 +82,7 @@
     <section class="dynamic">
       <h3>Equation</h3>
       <div class="row">
-        <input type="text" id="equation_input" placeholder="e.g. 2.5*3/1.5, sqrt(16), or 10^-3" />
+        <input type="text" id="equation_input" placeholder="e.g. 2.5*3/1.5, sqrt(16), 10^-3, or 1/x" />
         <button type="button" class="btn btn-primary" onclick="javascript: onGenerateDynamicTutorial();">Generate</button>
         <button type="button" class="btn" onclick="javascript: onReplayDynamicTutorial();">Replay</button>
       </div>
@@ -100,7 +100,7 @@
         <div class="help-content">
           Use <code>*</code> <code>/</code> <code>^</code> only (no + or −). Numbers and spaces allowed. Negative exponent allowed after <code>^</code> (e.g. <code>10^-3</code>).<br/>
           Functions: <code>sqrt(x)</code> <code>sin(x)</code> <code>cos(x)</code> <code>tan(x)</code> <code>log(x)</code> <code>ln(x)</code> — angles in degrees.<br/>
-          Examples: <code>2*3/4</code> <code>sqrt(6)*3</code> <code>10^-3</code> <code>1/7</code> <code>sin(30)*2</code>
+          Examples: <code>2*3/4</code> <code>sqrt(6)*3</code> <code>10^-3</code> <code>1/7</code> <code>1/x</code> (reciprocal of value on D, read on DI) <code>sin(30)*2</code>
         </div>
       </details>
     </section>
@@ -260,6 +260,7 @@ r . scales . push (new scale_C (24, {left: "C", la: 'right', ls: 0.05, indices: 
 
 r = new Rule (); s . rules . push (r);
 r . markings . push (new Engraving ("134", '10px arial', 'center', 'black', -0.084, 37, Math . PI * -0.5));
+r . markings . push (new Engraving ("2\u03c0", '10px arial', 'center', 'black', Math . log10 (2 * Math . PI), 12, 0));
 
 r . scales . push (new scale_D (24, {left: "D", la: 'right', ls: 0.05, indices: [1, 1]}));
 r . scales . push (new scale_DI (24, {left: "DI", la: 'right', ls: 0.05, marking_colour: 'red', indices: [1, 1]}));

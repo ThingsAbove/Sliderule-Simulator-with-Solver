@@ -8,7 +8,7 @@
   'use strict';
 
   var FUNCTIONS = { sqrt: 1, sin: 1, cos: 1, tan: 1, log: 1, ln: 1 };
-  var CONSTANTS = { pi: Math.PI, e: Math.E };
+  var CONSTANTS = { pi: Math.PI, e: Math.E, '2pi': 2 * Math.PI };
 
   function tokenize(s) {
     var tokens = [];
@@ -54,6 +54,11 @@
       if (c === '(') { tokens.push({ type: '(', start: i, end: i + 1 }); i++; continue; }
       if (c === ')') { tokens.push({ type: ')', start: i, end: i + 1 }); i++; continue; }
       if (/\d/.test(c) || (c === '.' && i + 1 < n && /\d/.test(s[i + 1]))) {
+        if (s.substring(i, i + 3) === '2pi' && (i + 3 >= n || !/[a-zA-Z0-9_]/.test(s[i + 3]))) {
+          tokens.push({ type: 'id', value: '2pi', start: i, end: i + 3 });
+          i += 3;
+          continue;
+        }
         var numTok = takeNumber();
         if (numTok && numTok.error) return numTok;
         if (numTok) { tokens.push(numTok); continue; }
@@ -68,7 +73,7 @@
     return tokens;
   }
 
-  function parse(s) {
+  function parse(s, options) {
     var tokenResult = tokenize(s);
     if (tokenResult.error) return tokenResult;
     var tokens = tokenResult;
@@ -129,6 +134,11 @@
       if (peek() && peek().type === 'id') {
         var id = consume('id');
         var name = id.value.toLowerCase();
+        if (options && options.variables && options.variables[id.value] !== undefined) {
+          var v = Number(options.variables[id.value]);
+          if (v !== v) return error('Variable ' + id.value + ' must be a number', id.start, id.end);
+          return { type: 'number', value: v, start: id.start, end: id.end };
+        }
         if (CONSTANTS[name] !== undefined) return { type: 'name', id: name, value: CONSTANTS[name], start: id.start, end: id.end };
         if (FUNCTIONS[name]) {
           if (!consume('(')) return error('Expected ( after ' + name, id.start, id.end);
@@ -155,7 +165,16 @@
     var ast = parseExpr();
     if (ast && ast.error) return ast;
     if (!ast) return error('Empty or invalid expression', 0, s.length);
-    if (peek()) return error(peek().type === '-' ? 'Minus is only allowed in the exponent (e.g. 10^-3)' : 'Unexpected token', peek().start, peek().end);
+    if (peek()) {
+      var firstStart = peek().start;
+      var lastEnd = peek().end;
+      for (var p = pos; p < tokens.length; p++) lastEnd = tokens[p].end;
+      var remainder = s.substring(firstStart).replace(/\s/g, '');
+      if (remainder === '1/x') {
+        return error('1/x must be entered alone (reciprocal of value on D). Run your calculation first, then enter 1/x. For reciprocal of an expression use 1/(expression).', firstStart, lastEnd);
+      }
+      return error(peek().type === '-' ? 'Minus is only allowed in the exponent (e.g. 10^-3)' : 'Unexpected token', firstStart, lastEnd);
+    }
     return ast;
   }
 
@@ -207,11 +226,11 @@
     return null;
   }
 
-  function parseEquation(s) {
+  function parseEquation(s, options) {
     if (typeof s !== 'string') return { error: true, message: 'Expected string', start: 0, end: 0 };
     s = s.trim();
     if (!s.length) return { error: true, message: 'Empty equation', start: 0, end: 0 };
-    var ast = parse(s);
+    var ast = parse(s, options);
     if (ast.error) return ast;
     var divErr = checkDivisionByZero(ast);
     if (divErr) return divErr;

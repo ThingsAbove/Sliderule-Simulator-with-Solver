@@ -180,7 +180,7 @@
       steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
       steps.push({ action: displayMessageWithExponent('First factor is ' + formatSigFig(v, PREC) + '. Move the slide so the ' + indexLabel + ' on C is over ' + formatSigFig(v, PREC) + ' on the D scale.' + indexReason), delay: delayMsg });
       steps.push({ action: function () {
-        if (typeof changeSide === 'function') changeSide('front');
+        if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
         ensureSide(['C', 'D']);
         cursorTo('D', dVal);
         slideTo('C', cIndex);
@@ -274,9 +274,13 @@
       var prodMsg = formatSigFig(prod, PREC_FINAL);
       currentMantissa = manProd.m;
       lastResultOnD = true;
-      ensureFront();
       currentExp = manProd.exp;
       exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp;
+      if (manB.m >= 0.9995 && manB.m <= 1.0005) {
+        steps.push({ action: displayMessageWithExponent('Multiply by ' + formatSigFig(b, PREC) + ' (' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp + '): exponent only; no movement.'), delay: delayMsg });
+        return;
+      }
+      ensureFront();
       if (lastMultiplyWasCI) {
         lastMultiplyWasCI = false;
         var productOnScale = (prod >= 1 && prod < 10);
@@ -307,6 +311,7 @@
       var cIndex = useRightIndex ? 10 : 1;
       var rScaleCursorMsg = afterRScaleSqrt ? ('Move the cursor to ' + formatSigFig(cursorCVal, PREC_FINAL) + ' on the C scale (the second factor).') : null;
       var useCI = lastResultOnD && !afterRScaleSqrt;
+      if (useCI && preferBack && profile.hasCIOnBack === false) useCI = false;
       if (useCI) {
         lastMultiplyWasCI = true;
         exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp;
@@ -374,6 +379,23 @@
     function stepDivide(op, divisionIndexInChain, inDivisionChain, chainSlideShift, cursorAtIndex) {
       var divisor = op.right;
       var dividend = (op.left != null && op.left !== undefined) ? toMantissa(op.left).m : currentMantissa;
+      if (dividend === 1 && op.left === 1 && profile.hasDI) {
+        resultOnDI = true;
+        lastResultOnD = false;
+        var valueOnD = divisor;
+        var recip = op.result;
+        var manD = toMantissa(valueOnD);
+        var manR = toMantissa(recip);
+        currentMantissa = manR.m;
+        currentExp = manR.exp;
+        exponentLogReason = 'reciprocal: ' + formatSigFig(valueOnD, PREC) + ' = ' + formatSigFig(manD.m, PREC) + '\u00d710^' + manD.exp + ' \u2192 1/x = ' + formatSigFig(manR.m, PREC) + '\u00d710^' + manR.exp;
+        steps.push({ action: displayMessageWithExponent('No movement needed. The value on D is ' + formatSigFig(valueOnD, PREC_FINAL) + '. Read its reciprocal on the DI scale: ' + formatSigFig(recip, PREC_FINAL) + '. \u2016 Exponent: ' + formatSigFig(valueOnD, PREC) + ' = ' + formatSigFig(manD.m, PREC) + '\u00d710^' + manD.exp + ', so 1/x = ' + formatSigFig(manR.m, PREC) + '\u00d710^' + manR.exp + '.'), delay: delayMsg });
+        steps.push({ action: function () {
+          if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['D', 'DI']) && typeof changeSide === 'function') changeSide('back');
+          ensureSide(['D', 'DI']);
+        }, delay: delayAction });
+        return;
+      }
       if (lastWasBack) {
         ensureFront();
         var transferVal = dividend;
@@ -861,7 +883,34 @@
     var divisionIndexInChain = 0;
     var chainSlideShift = null;
     var cursorAtIndex = false;
-    for (var i = 0; i < ops.length; i++) {
+    var resultOnDI = false;
+    var isReciprocalOnly = false;
+    var loopStartIndex = 0;
+    if (ops.length >= 2 && ops[0].op === 'init' && ops[0].value === 1 && ops[ops.length - 1].op === '/' && ops[ops.length - 1].left === 1) {
+      loopStartIndex = 1;
+    }
+
+    if (profile.hasDI && ops.length === 3 && ops[0].op === 'init' && ops[0].value === 1 && ops[1].op === 'init' && ops[2].op === '/' && ops[2].left === 1) {
+      isReciprocalOnly = true;
+      resultOnDI = true;
+      lastResultOnD = false;
+      var valueOnD = ops[2].right;
+      var recip = ops[2].result;
+      var manD = toMantissa(valueOnD);
+      var manR = toMantissa(recip);
+      currentExp = manR.exp;
+      exponentLogReason = 'reciprocal: ' + formatSigFig(valueOnD, PREC) + ' = ' + formatSigFig(manD.m, PREC) + '\u00d710^' + manD.exp + ' \u2192 1/x = ' + formatSigFig(manR.m, PREC) + '\u00d710^' + manR.exp;
+      steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
+      steps.push({ action: function () { undimScales(['D', 'DI']); changeMarkings('hairline', true); }, delay: 500 });
+      steps.push({ action: displayMessageWithExponent('No movement needed. The value on D is ' + formatSigFig(valueOnD, PREC_FINAL) + '. Read its reciprocal on the DI scale: ' + formatSigFig(recip, PREC_FINAL) + '. \u2016 Exponent: ' + formatSigFig(valueOnD, PREC) + ' = ' + formatSigFig(manD.m, PREC) + '\u00d710^' + manD.exp + ', so 1/x = ' + formatSigFig(manR.m, PREC) + '\u00d710^' + manR.exp + '.'), delay: delayMsg });
+      steps.push({ action: function () {
+        if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['D', 'DI']) && typeof changeSide === 'function') changeSide('back');
+        ensureSide(['D', 'DI']);
+      }, delay: delayAction });
+    }
+
+    if (!isReciprocalOnly) {
+    for (var i = loopStartIndex; i < ops.length; i++) {
       var op = ops[i];
       if (op.op === 'init') {
         if (isFirstInit) {
@@ -880,6 +929,12 @@
               if (op.value * manSecond.m >= 10) useRightIndex = true;
             }
             stepInit(op, useRightIndex);
+          } else if (i + 2 < ops.length && ops[i + 1].op === 'init' && ops[i + 2].op === '*') {
+            var useRightIndexDenom = false;
+            var secondValDenom = ops[i + 1].value;
+            var manSecondDenom = toMantissa(secondValDenom);
+            if (op.value * manSecondDenom.m >= 10) useRightIndexDenom = true;
+            stepInit(op, useRightIndexDenom);
           } else {
             var nextOp = (i + 1 < ops.length) ? ops[i + 1].op : null;
             var unaryOnly = (nextOp === 'sqrt' || nextOp === 'sin' || nextOp === 'cos' || nextOp === 'tan' || nextOp === 'log' || nextOp === 'ln' || nextOp === '^');
@@ -913,22 +968,25 @@
       else if (op.op === 'log') stepLog(op);
       else if (op.op === 'ln') stepLn(op);
     }
+    }
 
     var finalVal = finalResult;
     var finalMan = toMantissa(finalResult);
     var r1 = scaleName('R1');
     var r2 = scaleName('R2');
-    steps.unshift({ action: function () { if (typeof resetSlidePosition === 'function') resetSlidePosition(); ensureSide(['C', 'D']); cursorTo('D', 1); slideTo('C', 1); }, delay: 0 });
+    if (!isReciprocalOnly) steps.unshift({ action: function () { if (typeof resetSlidePosition === 'function') resetSlidePosition(); ensureSide(['C', 'D']); cursorTo('D', 1); slideTo('C', 1); }, delay: 0 });
     var _resultExp = currentExp;
     var _resultReason = exponentLogReason;
     steps.push({ action: function () {
-      if (lastWasFinalSqrt) ensureSide([r1, r2, 'D']);
+      if (resultOnDI) ensureSide(['D', 'DI']);
+      else if (lastWasFinalSqrt) ensureSide([r1, r2, 'D']);
       else if (lastWasBack) ensureSide(['S', 'D']);
       else ensureSide(['C', 'D']);
       isolate();
       sliderules.objective = function () {
         var ok = false;
-        if (lastResultOnD) ok = checkValue('D', finalMan.m);
+        if (resultOnDI) ok = checkValue('DI', finalMan.m);
+        else if (lastResultOnD) ok = checkValue('D', finalMan.m);
         else ok = true;
         if (ok) {
           message('Result: ' + equationStr + ' = ' + formatSigFig(finalVal, PREC_FINAL) + ' \u2016 Exponent log: ' + _resultExp + (_resultReason ? ' \u2014 ' + _resultReason : ''));
@@ -948,9 +1006,9 @@
     return steps;
   }
 
-  function generateTutorial(equationString, messageFn) {
+  function generateTutorial(equationString, messageFn, options) {
     if (!parseEquation || !messageFn) return { error: true, message: 'Missing equation parser or message function', start: 0, end: 0 };
-    var parsed = parseEquation(equationString);
+    var parsed = parseEquation(equationString, options);
     if (parsed.error) return parsed;
     var ast = parsed.ast;
     var finalResult = parsed.value;
