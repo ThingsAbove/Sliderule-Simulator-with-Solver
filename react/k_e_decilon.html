@@ -137,12 +137,11 @@ var dcl_undimm = function () {dimmm (47, 255, 8); setTimeout (function () {isola
 
 <script>
 
-var background = new Image (); background . src = "KELogo1874_600p.jpg"; background . onload = function () {sliderules . requireRedraw = true;};
 var decilon_logo = new Image (); decilon_logo . src = "decilon.png"; decilon_logo . onload = function () {sliderules . requireRedraw = true;};
 var keuffel_and_esser_logo = new Image (); keuffel_and_esser_logo . src = "keuffel_and_esser.png";
 keuffel_and_esser_logo . onload = function () {sliderules . requireRedraw = true;};
 
-var sliderules = new Sliderules ({position: {x: 32.5, y: 52.5}, background: background, background_colour: 'white', background_scaling: {x: 2, y: 2}});
+var sliderules = new Sliderules ({position: {x: 32.5, y: 52.5}, background_colour: 'white'});
 
 var s = new Sliderule (1200, {cursor_left_extension: 0.07, cursor_right_extension: 0.07, cursor_top_margin: 19, cursor_bottom_margin: 19, hairline_top: 20, hairline_bottom: 20, cursor_limit_left: 0.024, cursor_limit_right: 0.024}); sliderules . sliderules . push (s);
 
