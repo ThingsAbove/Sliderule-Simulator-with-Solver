@@ -25,23 +25,106 @@
 -->
 <html>
   <head>
+    <meta charset="UTF-8"/>
     <title>Keuffel & Esser 68-1100 Deci-Lon</title>
     <link rel="shortcut icon" type="image/x-icon" href="../h.ico"/>
+    <style>
+      .header { max-height: 150px; overflow-y: auto; overflow-x: hidden; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.4rem; padding: 0.35rem 0.6rem; background: linear-gradient(to bottom, #f8f9fa, #e9ecef); border-bottom: 1px solid #dee2e6; border-radius: 0 0 6px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif; font-size: 12px; }
+      .header .row1 { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; width: 100%; }
+      .header section { background: #fff; border: 1px solid #dee2e6; border-radius: 4px; padding: 0.25rem 0.4rem; min-width: 0; }
+      .header section h3 { margin: 0 0 0.2rem 0; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #495057; }
+      .header .markings label, .header .display label, .header .size label { display: inline-flex; align-items: center; gap: 0.2rem; margin-right: 0.4rem; cursor: pointer; white-space: nowrap; font-size: 11px; }
+      .header .display label { margin-right: 0.25rem; }
+      .header .dynamic { flex: 1; min-width: 200px; max-width: 360px; }
+      .header .dynamic .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-bottom: 0; }
+      .header .dynamic input[type="text"] { flex: 1; min-width: 120px; padding: 0.25rem 0.35rem; border: 1px solid #adb5bd; border-radius: 3px; font-size: 12px; }
+      .header .dynamic input[type="text"]:focus { outline: none; border-color: #2E5894; box-shadow: 0 0 0 1px rgba(46,88,148,0.2); }
+      .header .dynamic .btn { padding: 0.25rem 0.5rem; border: 1px solid #ced4da; border-radius: 3px; background: #fff; font-size: 11px; cursor: pointer; }
+      .header .dynamic .btn:hover { background: #e9ecef; border-color: #adb5bd; }
+      .header .dynamic .btn-primary { background: #2E5894; color: #fff; border-color: #2E5894; }
+      .header .dynamic .help { margin-top: 0.2rem; }
+      .header .dynamic .help summary { cursor: pointer; color: #495057; font-size: 11px; }
+      .header .dynamic .help-content { margin-top: 0.2rem; padding: 0.35rem; background: #f1f3f5; border-radius: 3px; font-size: 11px; color: #495057; line-height: 1.4; }
+      .header .dynamic .help-content code { background: #dee2e6; padding: 0.05rem 0.15rem; border-radius: 2px; font-size: 10px; }
+      #equation_error { color: #c92a2a; font-size: 11px; margin-top: 0.15rem; min-height: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #equation_problem_area { margin-top: 0.1rem; font-family: ui-monospace, monospace; font-size: 11px; min-height: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .header .static { min-width: 200px; }
+      .header .static .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-bottom: 0.2rem; }
+      .header .static .row:last-child { margin-bottom: 0; }
+      .header .static select { padding: 0.25rem 0.35rem; border: 1px solid #adb5bd; border-radius: 3px; font-size: 11px; min-width: 140px; max-width: 180px; background: #fff; }
+      .header .static .btn { padding: 0.25rem 0.4rem; border: 1px solid #ced4da; border-radius: 3px; background: #fff; font-size: 11px; cursor: pointer; }
+      .header .static .btn:hover { background: #e9ecef; }
+      .info-panel { position: fixed; top: 151px; left: 0; right: 0; z-index: 10; background: transparent; padding: 0.5rem 0.75rem; font-size: 13px; color: #c92a2a; overflow-y: auto; pointer-events: none; }
+      .info-panel span { display: block; text-shadow: 0 0 2px #fff, 0 0 4px #fff, 0 1px 2px rgba(0,0,0,0.3); }
+      .info-panel.hidden { display: none; }
+    </style>
   </head>
 <body onkeydown = "javascript: if (event . key . toUpperCase () === 'D') {var d = document . getElementById ('dimm_scales'); if (d) {d . checked = ! d . checked; if (d . checked) dcl_dimm (); else dcl_undimm ();}} else ProcessKey (event);">
 
-<div>
-	<input type = checkbox id = on_side onchange = "javascript: changeMarkings ('stator', this . checked);" />Markings on side.
-	<input type = checkbox id = on_hairline onchange = "javascript: changeMarkings ('hairline', this . checked);" />Markings on centre hairline.
-	<!--<input type = checkbox id = on_extras onchange = "javascript: changeMarkings ('hairlines', this . checked);" />Markings on additional hairlines.
-	<input type = checkbox id = other_side onchange = "javascript: changeSide (this . checked ? 'back' : 'front');" />Other side.-->
-	<input type = radio name = visible id = visible_front onchange = "javascript: changeSide ('front');" checked />Front
-	<input type = radio name = visible id = visible_back  onchange = "javascript: changeSide ('back');" />Back
-	<input type = radio name = visible id = visible_both  onchange = "javascript: changeSide ('both');" />Both Sides
-  <input type = checkbox id = dimm_scales onchange = "javascript: if (this . checked) dcl_dimm (); else dcl_undimm ();" />Dimm.
-	<input type = checkbox id = short_long onchange = "javascript: changeSize (this . checked ? 900 : 1200);" />Short/Long.
-</div>
-<div id="root"></div>
+<header class="header">
+  <div class="row1">
+    <section class="markings">
+      <h3>Markings</h3>
+      <label><input type="checkbox" id="on_side" onchange="javascript: changeMarkings('stator', this.checked);"/> side</label>
+      <label><input type="checkbox" id="on_hairline" onchange="javascript: changeMarkings('hairline', this.checked);"/> hairline</label>
+    </section>
+    <section class="display">
+      <h3>Display</h3>
+      <label><input type="radio" name="visible" id="visible_front" onchange="javascript: changeSide('front');" checked="true"/> Front</label>
+      <label><input type="radio" name="visible" id="visible_back" onchange="javascript: changeSide('back');"/> Back</label>
+      <label><input type="radio" name="visible" id="visible_both" onchange="javascript: changeSide('both');"/> Both</label>
+    </section>
+    <section class="size">
+      <h3>Size</h3>
+      <label><input type="checkbox" id="dimm_scales" onchange="javascript: if (this.checked) dcl_dimm(); else dcl_undimm();"/> Dimm</label>
+      <label><input type="checkbox" id="short_long" onchange="javascript: changeSize(this.checked ? 900 : 1200);"/> Short</label>
+    </section>
+    <section class="dynamic">
+      <h3>Equation</h3>
+      <div class="row">
+        <input type="text" id="equation_input" placeholder="e.g. 2.5*3/1.5, sqrt(16), or 10^-3" />
+        <button type="button" class="btn btn-primary" onclick="javascript: onGenerateDynamicTutorial();">Generate</button>
+        <button type="button" class="btn" onclick="javascript: onReplayDynamicTutorial();">Replay</button>
+      </div>
+      <div class="row step-controls" style="margin-top: 0.35rem;">
+        <button type="button" class="btn" id="tutorial_prev" title="Previous step" onclick="javascript: onTutorialStepBack();">&#9664; Prev</button>
+        <button type="button" class="btn" id="tutorial_next" title="Next step" onclick="javascript: onTutorialStepForward();">Next &#9654;</button>
+        <button type="button" class="btn" id="tutorial_play" title="Play" onclick="javascript: onTutorialPlay();">Play</button>
+        <button type="button" class="btn" id="tutorial_pause" title="Pause" onclick="javascript: onTutorialPause();">Pause</button>
+        <span class="step-counter" id="tutorial_step_counter" style="font-size: 11px; color: #495057; align-self: center;">Step 0 of 0</span>
+      </div>
+      <div id="equation_error"></div>
+      <div id="equation_problem_area"></div>
+      <details class="help">
+        <summary>Format help</summary>
+        <div class="help-content">
+          Use <code>*</code> <code>/</code> <code>^</code> only (no + or −). Numbers and spaces allowed. Negative exponent allowed after <code>^</code> (e.g. <code>10^-3</code>).<br/>
+          Functions: <code>sqrt(x)</code> <code>sin(x)</code> <code>cos(x)</code> <code>tan(x)</code> <code>log(x)</code> <code>ln(x)</code> — angles in degrees.<br/>
+          Examples: <code>2*3/4</code> <code>sqrt(6)*3</code> <code>10^-3</code> <code>1/7</code> <code>sin(30)*2</code>
+        </div>
+      </details>
+    </section>
+    <section class="static">
+      <h3>Lessons</h3>
+      <div class="row">
+        <select id="lessons"><option value="Choose Lesson ====">Choose Lesson ====</option></select>
+        <button type="button" class="btn" onclick="javascript: playLesson('lessons');">Play</button>
+      </div>
+      <div class="row">
+        <select id="tests"><option value="Choose Test of Merit ====">Choose Test of Merit ====</option></select>
+        <button type="button" class="btn" onclick="javascript: playLesson('tests');">Attempt</button>
+      </div>
+      <div class="row">
+        <button type="button" class="btn" id="clear_instructions" onclick="javascript: document.getElementById('info').innerHTML='';">Clear</button>
+        <button type="button" class="btn" id="copy_instructions" onclick="javascript: var el=document.getElementById('info'); var t=el?(el.innerText||el.textContent||''):''; if(!t&&el&&el.innerHTML){ t=el.innerHTML.replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,''); } if(t){ navigator.clipboard&&navigator.clipboard.writeText(t).then(function(){ var b=document.getElementById('copy_instructions'); if(b){ var old=b.textContent; b.textContent='Copied!'; setTimeout(function(){ b.textContent=old; },1200); } }); }">Copy instructions</button>
+        <button type="button" class="btn" id="toggle_info_panel" onclick="javascript: var p=document.querySelector('.info-panel'); var b=document.getElementById('toggle_info_panel'); if(p.classList.contains('hidden')){ p.classList.remove('hidden'); b.textContent='Hide panel'; } else { p.classList.add('hidden'); b.textContent='Show panel'; }">Hide panel</button>
+      </div>
+    </section>
+  </div>
+</header>
+<div class="info-panel"><span id="info">
+</span></div>
+<div id="root"><br></div>
 
 <script src="sliderule_construction_kit.js"></script>
 <script src="scales.js"></script>
@@ -185,12 +268,38 @@ r . scales . push (new spacer (2));
 
 </script>
 
+<script src="decilon_rule_profile.js"></script>
+<script>window.decilonRuleProfile = window.decilonRuleProfiles.decilon;</script>
+<script src="equation_parser.js"></script>
+<script src="dynamic_tutorial_decilon.js"></script>
+<script src="decilon_tutorial_ui.js"></script>
+<script src="manual/sliderule_tutorial_manual.js"></script>
+<script src="manual/sliderule_tutorial_multiplications.js"></script>
+<script src="manual/sliderule_tutorial_multiplications_folded.js"></script>
+<script src="manual/sliderule_tutorial_reciprocal.js"></script>
+<script src="manual/sliderule_tutorial_trigonometry_slide.js"></script>
+<script src="manual/sliderule_tutorial_tabling.js"></script>
+<script src="manual/sliderule_tutorial_astro.js"></script>
+<script src="manual/sliderule_test_manual.js"></script>
+<script src="manual/sliderule_test_multiplications.js"></script>
+<script src="manual/sliderule_test_reciprocal.js"></script>
+<script src="manual/sliderule_test_multiplications_folded.js"></script>
+<script src="manual/sliderule_test_trigonometry_slide.js"></script>
+<script src="manual/sliderule_test_tabling.js"></script>
+<script src="manual/sliderule_test_astro.js"></script>
+
+<script>
+readSlideruleLessons ('lessons', [userManual, multiplicationLessons, foldedMultiplicationLessons, reciprocalLessons, trigonometrySlideLessons, tablingLessons, astroLessons]);
+readSlideruleLessons ('tests', [userTrial, multiplicationTests, foldedMultiplicationTests, reciprocalTests, trigonometrySlideTests, tablingTests, astroTests]);
+</script>
+
+<script>window.slideruleInitialPositionAtBottom = true;</script>
 <script src="sliderule_application.js"></script>
+
+<script> changeSide ('front'); </script>
 <script>
 changeMarkings ('stator', document . getElementById ('on_side') . checked);
 changeMarkings ('hairline', document . getElementById ('on_hairline') . checked);
-//changeMarkings ('hairlines', document . getElementById ('on_extras') . checked);
-//changeSide (document . getElementById ('other_side') . checked ? 'back' : 'front');
 changeSide (document . getElementById ('visible_front') . checked ? 'front': document . getElementById ('visible_back') . checked ? 'back' : 'both');
 changeSize (document . getElementById ('short_long') . checked ? 900 : 1200);
 if (document . getElementById ('dimm_scales') . checked) {isolate (["A", "B", "C", "D"]); dimm(47, ['black', 'red']);}

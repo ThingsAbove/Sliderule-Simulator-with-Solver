@@ -1,7 +1,8 @@
 ///////////////////////////////////////////////////////////////////////////////////
-// Dynamic tutorial generator for Hemmi Versalog II.
+// Dynamic tutorial generator for K&E Deci-Lon (68-1100).
 // Converts a parsed equation (AST + value) into tutorial steps.
-// Depends: equation_parser.js, sliderule_ctrl.js, crnu/rndlist from construction kit.
+// Uses D/DI scale for division when profile.hasDI. Scale names: Sq1/Sq2, L, Ln0–Ln3, Ln-0–Ln-3, K.
+// Depends: equation_parser.js, sliderule_ctrl.js, crnu/rndlist from construction kit, decilon_rule_profile.js.
 ///////////////////////////////////////////////////////////////////////////////////
 
 (function () {
@@ -9,7 +10,11 @@
 
   var evaluate = window.equation_parser && window.equation_parser.evaluate;
   var parseEquation = window.equation_parser && window.equation_parser.parseEquation;
-  var profile = window.hemmiRuleProfile || { hasA: true, scaleL: 'LogX     L' };
+  var profile = window.decilonRuleProfile || (window.decilonRuleProfiles && window.decilonRuleProfiles.decilon) || { hasA: true, hasB: true, hasDI: true, scaleL: 'L', scaleNames: { R1: 'Sq1', R2: 'Sq2', K: 'K' } };
+
+  function scaleName(name) {
+    return (profile.scaleNames && profile.scaleNames[name]) || name;
+  }
 
   function toMantissa(x) {
     if (x === 0) return { m: 1, exp: -100 };
@@ -17,7 +22,7 @@
     var m = x / Math.pow(10, exp);
     if (m >= 10) { m /= 10; exp += 1; }
     if (m < 1 && m > 0) { m *= 10; exp -= 1; }
-    return { m: crnu(m), exp: exp }; // crnu = decimal places for mantissa; display uses formatSigFig
+    return { m: crnu(m), exp: exp };
   }
 
   function flattenOps(ast, out) {
@@ -61,10 +66,8 @@
     var delayMsg = 2000;
     var delayAction = 1500;
     var delayObj = 6000;
-    /** Slide rule precision: at most 4 significant figures display, 3 for final/read results. */
     var PREC = 4;
     var PREC_FINAL = 3;
-    /** Format a number with n significant figures for display (crnu uses decimal places, not sig figs). */
     function formatSigFig(x, n) {
       if (x === 0 || !isFinite(x)) return String(x);
       return String(Number(Number(x).toPrecision(n)));
@@ -73,16 +76,18 @@
     var currentExp = 0;
     var sidesUsed = { front: false, back: false };
     var lastWasBack = false;
+    /** If user started on the back and back has required scales, prefer back for operations that support it. */
+    var preferBack = false;
+    if (typeof currentSideHasScales === 'function' && currentSideHasScales(['D', 'DI'])) {
+      preferBack = true;
+      sidesUsed.back = true;
+    }
     var lastResultOnD = true;
     var lastWasFinalSqrt = false;
-    /** After sqrt on R1/R2 (no A scale), cursor does not "hold" the value; next multiply must re-enter it. */
     var lastResultFromRScale = false;
-    /** After CI multiply, result is under the right index; next multiply can be done by cursor to C only (no slide move). */
     var lastMultiplyWasCI = false;
 
-    /** Exponent log scratchpad: reason for last change (shown at end of every instruction). */
     var exponentLogReason = '\u2014';
-    /** Capture current exponent state and return an action that shows that state for this step only. */
     function displayMessageWithExponent(t) {
       var _exp = currentExp;
       var _reason = exponentLogReason;
@@ -91,9 +96,6 @@
       };
     }
 
-    // ——— Rule book: body limits, scale positions, division/mult and index choice ———
-    // CI multiply: cursor at first factor on D, slide so second factor on CI is under cursor.
-    // Slide target = log10(a) + log10(b) - 1. Left index at body position = target, right at target+1. Pick the index that is on scale (inRange).
     function whichIndexCIMultiply(firstFactor, secondFactor) {
       var slideTarget = Math.log10(firstFactor) + Math.log10(secondFactor) - 1;
       return whichIndex(slideTarget, firstFactor * secondFactor);
@@ -123,7 +125,6 @@
       var e = Math.floor(Math.log10(x));
       return (e % 2 === 0) ? 'left' : 'right';
     }
-    /** Number of digits to the left of the decimal (for R1 vs R2: odd → R1, even → R2). */
     function digitsLeftOfDecimal(x) {
       if (x <= 0 || !isFinite(x)) return 0;
       x = Math.abs(x);
@@ -195,15 +196,27 @@
       exponentLogReason = 'dividend ' + formatSigFig(man.m, PREC) + '\u00d710^' + man.exp;
       lastWasBack = false;
       lastResultOnD = true;
-      ensureFront();
-      steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
-      steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-      steps.push({ action: displayMessageWithExponent('Division chain: set the dividend. Move the cursor to ' + formatSigFig(v, PREC) + ' on the D scale.'), delay: delayMsg });
-      steps.push({ action: function () {
-        if (typeof changeSide === 'function') changeSide('front');
-        ensureSide(['C', 'D']);
-        cursorTo('D', dVal);
-      }, delay: delayAction });
+      if (preferBack && profile.hasDI) {
+        sidesUsed.back = true;
+        steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
+        steps.push({ action: function () { undimScales(['D', 'DI']); changeMarkings('hairline', true); }, delay: 500 });
+        steps.push({ action: displayMessageWithExponent('Division chain: set the dividend. Move the cursor to ' + formatSigFig(v, PREC) + ' on the D scale (back side).'), delay: delayMsg });
+        steps.push({ action: function () {
+          if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['D', 'DI']) && typeof changeSide === 'function') changeSide('back');
+          ensureSide(['D', 'DI']);
+          cursorTo('D', dVal);
+        }, delay: delayAction });
+      } else {
+        ensureFront();
+        steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
+        steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+        steps.push({ action: displayMessageWithExponent('Division chain: set the dividend. Move the cursor to ' + formatSigFig(v, PREC) + ' on the D scale.'), delay: delayMsg });
+        steps.push({ action: function () {
+          if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
+          ensureSide(['C', 'D']);
+          cursorTo('D', dVal);
+        }, delay: delayAction });
+      }
     }
 
     function stepMultiply(op) {
@@ -293,7 +306,7 @@
       exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp + (useRightIndex ? ' + 1 (index shift: slide left)' : '');
       var cIndex = useRightIndex ? 10 : 1;
       var rScaleCursorMsg = afterRScaleSqrt ? ('Move the cursor to ' + formatSigFig(cursorCVal, PREC_FINAL) + ' on the C scale (the second factor).') : null;
-      var useCI = resultWasOnD && !afterRScaleSqrt;
+      var useCI = lastResultOnD && !afterRScaleSqrt;
       if (useCI) {
         lastMultiplyWasCI = true;
         exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp;
@@ -301,17 +314,30 @@
         var ciIndexLabel = (ciMultiplyIndex === 10) ? 'right index (10)' : 'left index (1)';
         steps.push({ action: function () { undimScales(['C', 'D', 'CI']); changeMarkings('hairline', true); }, delay: 500 });
         steps.push({ action: displayMessageWithExponent('First factor is already on D (under the cursor). Without moving the cursor, move the slide so ' + formatSigFig(cursorCVal, PREC) + ' on the CI scale is under the cursor. Read the product on D under the ' + ciIndexLabel + '.'), delay: delayMsg });
+        var tValNum = Number(transferVal);
+        var cValNum = Number(cursorCVal);
+        var idxNum = Number(ciMultiplyIndex);
+        if (!isFinite(tValNum)) tValNum = transferVal;
+        if (!isFinite(cValNum)) cValNum = cursorCVal;
+        if (!isFinite(idxNum)) idxNum = ciMultiplyIndex;
         steps.push({
-          action: (function (tVal, cVal, idx) {
+          action: (function (tVal, cVal) {
             return function () {
               if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D', 'CI']) && typeof changeSide === 'function') changeSide('front');
               ensureSide(['C', 'D', 'CI']);
               cursorTo('D', tVal);
               slideTo('CI', cVal);
+            };
+          })(tValNum, cValNum),
+          delay: delayAction
+        });
+        steps.push({
+          action: (function (idx) {
+            return function () {
               cursorTo('C', idx);
             };
-          })(transferVal, cursorCVal, ciMultiplyIndex),
-          delay: delayAction
+          })(idxNum),
+          delay: 400
         });
         steps.push({ action: displayMessageWithExponent('Read intermediate result ' + prodMsg + ' on D under the ' + ciIndexLabel + '.'), delay: delayMsg });
       } else if (useCF) {
@@ -345,8 +371,6 @@
       }
     }
 
-    // Division: CI/CIF shortcut only when cursor is AT THE INDEX (result under index).
-    // After using CI/CIF, cursor is over the quotient on D (not at index); next division must move the slide.
     function stepDivide(op, divisionIndexInChain, inDivisionChain, chainSlideShift, cursorAtIndex) {
       var divisor = op.right;
       var dividend = (op.left != null && op.left !== undefined) ? toMantissa(op.left).m : currentMantissa;
@@ -382,6 +406,25 @@
       currentMantissa = manQuot.m;
       lastResultOnD = true;
       var newSlideShift = Math.log10(dividend) - Math.log10(divisorM);
+      var readIndex = whichIndex(newSlideShift, manQuot.m);
+      var indexLabel = (readIndex === 10) ? 'right index (10)' : 'left index (1)';
+
+      // DI scale (Decilon): flip to back, cursor to dividend on D, slide so divisor on DI under cursor, read quotient on D under index.
+      if (profile.hasDI && (!inDivisionChain || divisionIndexInChain === 0)) {
+        sidesUsed.back = true;
+        currentExp = manQuot.exp;
+        exponentLogReason = 'divide by ' + formatSigFig(manDiv.m, PREC) + '\u00d710^' + manDiv.exp;
+        steps.push({ action: displayMessageWithExponent('Divide by ' + formatSigFig(divisor, PREC) + ' using the DI scale (back side). Set the cursor to ' + formatSigFig(dividend, PREC) + ' on the D scale.'), delay: delayMsg });
+        steps.push({ action: function () { undimScales(['D', 'DI']); changeMarkings('hairline', true); }, delay: 500 });
+        steps.push({ action: displayMessageWithExponent('Move the slide so ' + formatSigFig(divisorM, PREC) + ' on the DI scale is under the cursor. The quotient (' + quotMsg + ') is on the D scale under the ' + indexLabel + '.'), delay: delayMsg });
+        steps.push({ action: function () {
+          if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['D', 'DI']) && typeof changeSide === 'function') changeSide('back');
+          ensureSide(['D', 'DI']);
+          cursorTo('D', dividend);
+          slideTo('DI', divisorM);
+        }, delay: delayAction });
+        return { slideShift: newSlideShift, cursorAtIndex: true };
+      }
 
       var useCIorCIF = (inDivisionChain && divisionIndexInChain > 0 && cursorAtIndex &&
         chooseDivisionMethod(chainSlideShift, divisorM));
@@ -408,24 +451,13 @@
 
       ensureFront();
       steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-      var readIndex = whichIndex(newSlideShift, manQuot.m);
       currentExp = manQuot.exp;
       exponentLogReason = 'divide by ' + formatSigFig(manDiv.m, PREC) + '\u00d710^' + manDiv.exp + (readIndex === 10 ? ' \u22121 (index shift: slide left)' : '');
-      var indexLabel = (readIndex === 10) ? 'right index (10)' : 'left index (1)';
-      // For a standalone division (or the first division in a chain), the cursor must be
-      // explicitly placed on the dividend on the D scale before sliding to the divisor.
-      // Previously we assumed the cursor was already on the dividend, which was not true
-      // after a preceding multiply chain inside parentheses (e.g. 1/(2*pi*...)).
       if (!inDivisionChain || divisionIndexInChain === 0) {
-        steps.push({
-          action: displayMessageWithExponent('Set the cursor to ' + formatSigFig(dividend, PREC) + ' on the D scale (the dividend).'),
-          delay: delayMsg
-        });
+        steps.push({ action: displayMessageWithExponent('Set the cursor to ' + formatSigFig(dividend, PREC) + ' on the D scale (the dividend).'), delay: delayMsg });
         steps.push({
           action: function () {
-            if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') {
-              changeSide('front');
-            }
+            if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
             ensureSide(['C', 'D']);
             cursorTo('D', dividend);
           },
@@ -447,37 +479,37 @@
       return { slideShift: newSlideShift, cursorAtIndex: true };
     }
 
-    // Which LL scale (LL1, LL2, LL3) contains value > 1? LL1: e^0.01..e^0.1, LL2: e^0.1..e, LL3: e..e^10.
     function llScaleForValue(value) {
       if (value <= 0 || value <= 1) return null;
       var ln = Math.log(value);
-      if (ln <= 0.1) return 'LL1';
-      if (ln <= 1) return 'LL2';
-      if (ln <= 10) return 'LL3';
+      if (ln <= 0.1) return 'Ln1';
+      if (ln <= 1) return 'Ln2';
+      if (ln <= 10) return 'Ln3';
       return null;
     }
 
-    /** C-scale index for LL power operations: right index (10) when base < 1 and result > 1 so cursor moves left and stays on scale; left index (1) otherwise. */
     function llPowerCIndex(base, result) {
       var useRight = (base < 1 && result > 1);
       return { index: useRight ? 10 : 1, label: useRight ? 'right index (10)' : 'left index (1)' };
     }
 
-    // Which "down" LL scale (Versalog: LL02, LL03, etc.) contains 0 < value < 1?
-    // Versalog: LL02 ~ e^-0.1 to e^-1 (≈0.9–0.37), LL03 ~ e^-1 to e^-10 (≈0.37–0.00005). 0.3 is on LL02, 0.0081 on LL03.
     function llDownScaleForValue(value) {
       if (value <= 0 || value >= 1) return null;
       var x = -Math.log(value);
-      if (x >= 0.1 && x < 1.25) return 'LL02';   // base e.g. 0.3 (x≈1.2) on LL02
-      if (x >= 1.25 && x <= 10) return 'LL03';   // result e.g. 0.0081 (x≈4.8) on LL03
-      if (x >= 0.01 && x < 0.1) return 'LL01';
-      if (x >= 0.001 && x < 0.01) return 'LL00';
-      if (x > 10) return 'LL03';
-      if (x > 0 && x < 0.001) return 'LL00';
-      return 'LL03';
+      if (x >= 0.1 && x < 1.25) return 'Ln-2';
+      if (x >= 1.25 && x <= 10) return 'Ln-3';
+      if (x >= 0.01 && x < 0.1) return 'Ln-1';
+      if (x >= 0.001 && x < 0.01) return 'Ln-0';
+      if (x > 10) return 'Ln-3';
+      if (x > 0 && x < 0.001) return 'Ln-0';
+      return 'Ln-3';
     }
 
-    // Find the actual scale.left of an LL-type scale that contains the value (for cursorTo).
+    function isLLDownScaleLeft(left) {
+      if (!left || typeof left !== 'string') return false;
+      return left.indexOf('LL0') >= 0 || left.indexOf('LL/') >= 0 || left.indexOf('Ln-') >= 0;
+    }
+
     function findLLScaleNameForValue(value) {
       var list = (typeof sliderules !== 'undefined' && sliderules.sliderules) ? sliderules.sliderules : (window.sliderules && window.sliderules.sliderules);
       if (!list) return null;
@@ -488,7 +520,8 @@
           for (var s in rule.scales) {
             var scale = rule.scales[s];
             var left = scale.left;
-            if (left && (left === 'LL1' || left === 'LL2' || left === 'LL3' || left.indexOf('LL2') >= 0 || left.indexOf('LL3') >= 0 || left.indexOf('LL1') >= 0) && typeof scale.location === 'function') {
+            var isUp = left && (left === 'LL1' || left === 'LL2' || left === 'LL3' || left.indexOf('LL2') >= 0 || left.indexOf('LL3') >= 0 || left.indexOf('LL1') >= 0 || left === 'Ln0' || left === 'Ln1' || left === 'Ln2' || left === 'Ln3' || (left.indexOf && left.indexOf('Ln') === 0 && left.indexOf('Ln-') < 0));
+            if (isUp && typeof scale.location === 'function') {
               try {
                 var loc = scale.location(value);
                 if (loc >= -0.02 && loc <= 1.02) return left;
@@ -500,12 +533,6 @@
       return null;
     }
 
-    // Find scale name for 0 < value < 1 (LL03, LL02, LL01, LL00 or Hemmi LL/3, LL/2, LL/1 "down" scales).
-    // Only consider scales whose left suggests an LL "down" scale (e.g. LL03 or LL/3), not the linear L scale.
-    function isLLDownScaleLeft(left) {
-      if (!left || typeof left !== 'string') return false;
-      return left.indexOf('LL0') >= 0 || left.indexOf('LL/') >= 0;
-    }
     function findLLDownScaleNameForValue(value) {
       if (value <= 0 || value >= 1) return null;
       var list = (typeof sliderules !== 'undefined' && sliderules.sliderules) ? sliderules.sliderules : (window.sliderules && window.sliderules.sliderules);
@@ -536,6 +563,9 @@
       var manBase = toMantissa(base);
       var manResult = toMantissa(result);
       currentMantissa = manResult.m;
+      var r1 = scaleName('R1');
+      var r2 = scaleName('R2');
+      var kScale = scaleName('K');
       if (exp === 2) {
         ensureFront();
         if (profile.hasA) {
@@ -547,10 +577,10 @@
         } else {
           var nDigitsSq = digitsLeftOfDecimal(result);
           var useR1Sq = (nDigitsSq % 2 === 1);
-          var rScaleSq = useR1Sq ? 'R1' : 'R2';
-          var rHintSq = useR1Sq ? 'Odd number of digits in result → use R1.' : 'Even number of digits in result → use R2.';
-          steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.front = true; }, delay: 100 });
-          steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+          var rScaleSq = useR1Sq ? r1 : r2;
+          var rHintSq = useR1Sq ? 'Odd number of digits in result → use ' + r1 + '.' : 'Even number of digits in result → use ' + r2 + '.';
+          steps.push({ action: function () { ensureSide([r1, r2, 'D']); sidesUsed.front = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales([r1, r2, 'D']); changeMarkings('hairline', true); }, delay: 500 });
           steps.push({ action: displayMessageWithExponent('Square: cursor to ' + formatSigFig(manBase.m, PREC) + ' on D, read ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScaleSq + '. ' + rHintSq), delay: delayMsg });
           steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
           steps.push({ action: displayMessageWithExponent('Read result on ' + rScaleSq + ' scale: ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
@@ -571,11 +601,11 @@
         } else {
           var nDigitsSqrtPow = digitsLeftOfDecimal(base);
           var useR1SqrtPow = (nDigitsSqrtPow % 2 === 1);
-          var rScaleSqrtPow = useR1SqrtPow ? 'R1' : 'R2';
-          var rHintSqrtPow = useR1SqrtPow ? 'Odd number of digits to the left of the decimal → use R1.' : 'Even number of digits to the left of the decimal → use R2.';
-          steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.front = true; }, delay: 100 });
-          steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(base, PREC) + ': use R scales. Set cursor on ' + formatSigFig(manBase.m, PREC) + ' on D, read ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScaleSqrtPow + '. ' + rHintSqrtPow), delay: delayMsg });
+          var rScaleSqrtPow = useR1SqrtPow ? r1 : r2;
+          var rHintSqrtPow = useR1SqrtPow ? 'Odd number of digits to the left of the decimal → use ' + r1 + '.' : 'Even number of digits to the left of the decimal → use ' + r2 + '.';
+          steps.push({ action: function () { ensureSide([r1, r2, 'D']); sidesUsed.front = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales([r1, r2, 'D']); changeMarkings('hairline', true); }, delay: 500 });
+          steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(base, PREC) + ': use square scales. Set cursor on ' + formatSigFig(manBase.m, PREC) + ' on D, read ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScaleSqrtPow + '. ' + rHintSqrtPow), delay: delayMsg });
           steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
           steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScaleSqrtPow + ' scale.'), delay: delayMsg });
         }
@@ -583,11 +613,11 @@
         exponentLogReason = 'sqrt: exponent \u00f7 2';
       } else if (exp === 3) {
         ensureFront();
-        steps.push({ action: function () { ensureSide(['K', 'D']); sidesUsed.front = true; }, delay: 100 });
-        steps.push({ action: function () { undimScales(['K', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: displayMessageWithExponent('Cube: cursor to ' + formatSigFig(manBase.m, PREC) + ' on D, read ' + formatSigFig(result, PREC_FINAL) + ' on K.'), delay: delayMsg });
+        steps.push({ action: function () { ensureSide([kScale, 'D']); sidesUsed.front = true; }, delay: 100 });
+        steps.push({ action: function () { undimScales([kScale, 'D']); changeMarkings('hairline', true); }, delay: 500 });
+        steps.push({ action: displayMessageWithExponent('Cube: cursor to ' + formatSigFig(manBase.m, PREC) + ' on D, read ' + formatSigFig(result, PREC_FINAL) + ' on ' + kScale + '.'), delay: delayMsg });
         steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
-        steps.push({ action: displayMessageWithExponent('Read result on K scale: ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Read result on ' + kScale + ' scale: ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
         currentExp = currentExp * 3;
         exponentLogReason = 'cube: exponent \u00d7 3';
         lastResultOnD = false;
@@ -595,33 +625,30 @@
         ensureFront();
         var third = cubeRootThird(base);
         var thirdName = (third === 0) ? 'left' : (third === 1 ? 'middle' : 'right');
-        steps.push({ action: function () { ensureSide(['K', 'D']); sidesUsed.front = true; }, delay: 100 });
-        steps.push({ action: function () { undimScales(['K', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: displayMessageWithExponent('Cube root: use ' + thirdName + ' third of K. Cursor to ' + formatSigFig(base, PREC) + ' on K, read ' + formatSigFig(result, PREC_FINAL) + ' on D.'), delay: delayMsg });
-        steps.push({ action: function () { cursorTo('K', manBase.m); }, delay: delayAction });
+        steps.push({ action: function () { ensureSide([kScale, 'D']); sidesUsed.front = true; }, delay: 100 });
+        steps.push({ action: function () { undimScales([kScale, 'D']); changeMarkings('hairline', true); }, delay: 500 });
+        steps.push({ action: displayMessageWithExponent('Cube root: use ' + thirdName + ' third of ' + kScale + '. Cursor to ' + formatSigFig(base, PREC) + ' on ' + kScale + ', read ' + formatSigFig(result, PREC_FINAL) + ' on D.'), delay: delayMsg });
+        steps.push({ action: function () { cursorTo(kScale, manBase.m); }, delay: delayAction });
         steps.push({ action: displayMessageWithExponent('Read result on D scale: ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
         currentExp = Math.floor(currentExp / 3);
         exponentLogReason = 'cube root: exponent \u00f7 3';
-      } else if (base > 0 && exp < 0 && result > 0 && result < 1) {
-        // Negative exponent: result on LL "down" scales (e.g. 10^-3 = 0.001 on LL03), or log method if result too small.
-        var expMag = -exp;
+      } else {
+        // LL power steps: use same structure as Hemmi but with Decilon scale names (Ln1, Ln2, Ln3, Ln-0..Ln-3)
         var baseScaleLabel = llScaleForValue(base);
         var baseScaleName = findLLScaleNameForValue(base);
         var resultDownLabel = llDownScaleForValue(result);
         var resultDownScaleName = findLLDownScaleNameForValue(result);
-        if (baseScaleLabel && baseScaleName && resultDownLabel && resultDownScaleName) {
+        if (base > 0 && exp < 0 && result > 0 && result < 1 && baseScaleName && resultDownScaleName) {
           ensureBack();
           var scalesToShow = [baseScaleName, resultDownScaleName, 'C', 'D'];
           steps.push({ action: function () { ensureSide(scalesToShow); sidesUsed.back = true; }, delay: 100 });
           steps.push({ action: function () { undimScales(scalesToShow); changeMarkings('hairline', true); }, delay: 500 });
+          var expMag = -exp;
           var expM = (expMag <= 10) ? expMag : expMag / Math.pow(10, Math.floor(Math.log10(expMag)));
           var cIndexNeg = llPowerCIndex(base, result);
-          steps.push({ action: displayMessageWithExponent('Negative power ' + formatSigFig(base, PREC) + '^(' + exp + ') = ' + formatSigFig(result, PREC_FINAL) + ': use the LL scale for the base and the LL "down" scale for the result (values < 1).'), delay: delayMsg });
-          steps.push({ action: displayMessageWithExponent('Set the cursor to ' + formatSigFig(base, PREC) + ' on the ' + baseScaleLabel + ' scale (base ' + formatSigFig(base, PREC) + ').'), delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Negative power ' + formatSigFig(base, PREC) + '^(' + exp + ') = ' + formatSigFig(result, PREC_FINAL) + ': use the LL scale for the base and the LL down scale for the result.'), delay: delayMsg });
           steps.push({ action: function () { cursorTo(baseScaleName, base); }, delay: delayAction });
-          steps.push({ action: displayMessageWithExponent('Move the slide so the ' + cIndexNeg.label + ' of the C scale is under the cursor. Then ' + formatSigFig(expM, PREC) + ' on C will align with the result on the ' + resultDownScaleName + ' scale.'), delay: delayMsg });
           steps.push({ action: function () { slideTo('C', cIndexNeg.index); }, delay: delayAction });
-          steps.push({ action: displayMessageWithExponent('Move the cursor to ' + formatSigFig(expM, PREC) + ' on the C scale (exponent magnitude ' + formatSigFig(expMag, PREC) + '). The result appears on the ' + resultDownScaleName + ' scale (down scale for values < 1).'), delay: delayMsg });
           steps.push({ action: function () { cursorTo('C', expM); }, delay: delayAction });
           steps.push({ action: displayMessageWithExponent('Read ' + formatSigFig(result, PREC_FINAL) + ' under the cursor on the ' + resultDownScaleName + ' scale.'), delay: delayMsg });
           currentMantissa = manResult.m;
@@ -629,216 +656,27 @@
           exponentLogReason = 'negative power: result exponent';
           lastWasBack = true;
           lastResultOnD = false;
-        } else if (result > 0) {
-          // Result too small for LL down scales (e.g. 3^-20). Use log method: log10(a^b) = b × log10(a).
-          var log10Base = Math.log10(base);
-          var product = exp * log10Base;
-          var characteristic = Math.floor(product);
-          var logMantissa = product - characteristic;
-          if (logMantissa < 0) logMantissa += 1;
-          var resultMantissaFromLog = Math.pow(10, logMantissa);
-          var dVal = log10Base >= 1 ? log10Base : log10Base * 10;
-          var cVal = expMag <= 10 ? expMag : expMag / Math.pow(10, Math.floor(Math.log10(expMag)));
-          var multProduct = dVal * cVal;
-          var useRightIndex = multProduct > 10;
-          var cIndex = useRightIndex ? 10 : 1;
-          var readOnD = useRightIndex ? multProduct / 10 : multProduct;
-          function toSigFigs(x, n) { if (x === 0 || !isFinite(x)) return x; return Number(Number(x).toPrecision(n)); }
-          var log10BaseD = toSigFigs(log10Base, 3);
-          var productD = toSigFigs(product, 4);
-          var logMantissaD = toSigFigs(logMantissa, 3);
-          var resultMantD = toSigFigs(resultMantissaFromLog, 3);
-          var resultD = toSigFigs(result, 3);
-          var resultExp = Math.floor(Math.log10(Math.abs(result)));
-          var indexLabel = useRightIndex ? 'right index (10)' : 'left index (1)';
-          var lScaleName = profile.scaleL;
+        } else if (base > 0 && result > 0 && baseScaleName) {
           ensureBack();
-          currentExp = 0;
-          exponentLogReason = 'log method';
-          steps.push({ action: function () { ensureSide([lScaleName, 'C', 'D']); sidesUsed.back = true; }, delay: 100 });
-          steps.push({ action: function () { undimScales([lScaleName, 'C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          steps.push({ action: displayMessageWithExponent(formatSigFig(base, PREC) + '^(' + exp + ') = ' + resultD + '×10^' + characteristic + ' is below the LL down scale range. Use the log method: log₁₀(a^b) = b × log₁₀(a).'), delay: delayMsg });
-          steps.push({ action: displayMessageWithExponent('Step A: Find log₁₀(' + formatSigFig(base, 2) + '). Cursor to ' + formatSigFig(manBase.m, PREC) + ' on D; read on L: log₁₀(' + formatSigFig(base, 2) + ') ≈ ' + log10BaseD + '.'), delay: delayMsg });
-          steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
-          steps.push({ action: displayMessageWithExponent('Step B: Compute ' + expMag + ' × ' + log10BaseD + ' on C and D. Set the ' + indexLabel + ' of C over ' + formatSigFig(dVal, PREC) + ' on D. Move the cursor to ' + formatSigFig(cVal, PREC) + ' on C (representing exponent magnitude ' + expMag + ').'), delay: delayMsg });
-          steps.push({ action: function () { ensureSide([lScaleName, 'C', 'D']); cursorTo('D', dVal); slideTo('C', cIndex); }, delay: delayAction });
-          steps.push({ action: function () { cursorTo('C', cVal); }, delay: delayAction });
-          currentExp = characteristic;
-          exponentLogReason = 'log\u2081\u2080(result) characteristic';
-          steps.push({ action: displayMessageWithExponent('Step C: Read ' + formatSigFig(readOnD, PREC_FINAL) + ' on D (i.e. ' + toSigFigs(readOnD, 4) + '). log₁₀(result) = ' + productD + ', characteristic ' + characteristic + ', mantissa ≈ ' + logMantissaD + '.'), delay: delayMsg });
-          currentExp = resultExp;
-          exponentLogReason = 'negative power: result exponent';
-          steps.push({ action: displayMessageWithExponent('Step D: Antilog: move the slide so the left index (1) of C is over the result mantissa on D (≈ ' + resultMantD + '). The answer is on the D scale under the index.'), delay: delayMsg });
-          steps.push({ action: function () { ensureSide([lScaleName, 'C', 'D']); cursorTo('D', resultMantissaFromLog); slideTo('C', 1); }, delay: delayAction });
-          steps.push({ action: displayMessageWithExponent('Result: ' + formatSigFig(base, 2) + '^(' + exp + ') = ' + resultMantD + ' × 10^' + characteristic + ' ≈ ' + resultD + '×10^' + characteristic + '. Read the result mantissa on D under the index.'), delay: delayMsg });
-          currentMantissa = manResult.m;
-          currentExp = resultExp;
-          exponentLogReason = 'negative power: result exponent';
-          lastWasBack = true;
-          lastResultOnD = true;
-        } else {
-          steps.push({ action: displayMessageWithExponent('Negative power ' + formatSigFig(base, PREC) + '^(' + exp + ') = ' + formatSigFig(result, PREC_FINAL) + ' (use LL down scales if available; otherwise 1/' + formatSigFig(base, PREC) + '^' + formatSigFig(expMag, PREC) + ').'), delay: delayMsg });
-        }
-      } else if (base > 0 && exp < 0 && result >= 1) {
-        // Negative exponent with result >= 1 (e.g. 0.3^-4 = 123): base on LL0 (down), result on LL (up).
-        var expMag = -exp;
-        var baseDownLabel = llDownScaleForValue(base);
-        var baseDownScaleName = findLLDownScaleNameForValue(base);
-        var resultUpLabel = llScaleForValue(result);
-        var resultUpScaleName = findLLScaleNameForValue(result);
-        if (baseDownScaleName && resultUpScaleName) {
-          ensureBack();
-          var scalesToShowNeg = [baseDownScaleName, 'C', 'D'];
-          if (resultUpScaleName && resultUpScaleName !== baseDownScaleName) scalesToShowNeg.push(resultUpScaleName);
-          steps.push({ action: function () { ensureSide(scalesToShowNeg); sidesUsed.back = true; if (typeof resetSlidePosition === 'function') resetSlidePosition(); }, delay: 100 });
-          steps.push({ action: function () { undimScales(scalesToShowNeg); changeMarkings('hairline', true); }, delay: 500 });
-          var expM = (expMag <= 10) ? expMag : expMag / Math.pow(10, Math.floor(Math.log10(expMag)));
-          var resultExpNeg = Math.floor(Math.log10(Math.abs(result)));
-          var cIndexNegBaseFrac = llPowerCIndex(base, result);
-          steps.push({ action: displayMessageWithExponent('Negative power ' + formatSigFig(base, PREC) + '^(' + exp + ') = ' + formatSigFig(result, PREC_FINAL) + ': base &lt; 1 on LL0, result &gt; 1 on LL. Step 1: Set the ' + cIndexNegBaseFrac.label + ' of the C scale over ' + formatSigFig(base, PREC) + ' on the ' + (baseDownLabel || 'LL02') + ' scale.'), delay: delayMsg });
-          steps.push({ action: function () { ensureSide(scalesToShowNeg); cursorTo(baseDownScaleName, base); slideTo('C', cIndexNegBaseFrac.index); }, delay: delayAction });
-          steps.push({ action: displayMessageWithExponent('Step 2: Move the hairline to ' + formatSigFig(expM, PREC) + ' on the C scale (exponent magnitude ' + expMag + '). Result appears on the ' + (resultUpLabel || 'LL') + ' scale (values &gt; 1).'), delay: delayMsg });
-          steps.push({ action: function () { ensureSide(scalesToShowNeg); cursorTo('C', expM); }, delay: delayAction });
-          steps.push({ action: displayMessageWithExponent('Step 3: Read ' + formatSigFig(result, PREC_FINAL) + ' under the hairline on the ' + (resultUpLabel || 'LL') + ' scale.'), delay: delayMsg });
-          currentExp = resultExpNeg;
-          exponentLogReason = 'negative power: result exponent';
-          lastWasBack = true;
-          lastResultOnD = false;
-        } else {
-          steps.push({ action: displayMessageWithExponent('Negative power ' + formatSigFig(base, PREC) + '^(' + exp + ') = ' + formatSigFig(result, PREC_FINAL) + ' (use LL0 for base, LL for result; or 1/' + formatSigFig(base, PREC) + '^' + formatSigFig(expMag, PREC) + ').'), delay: delayMsg });
-        }
-      } else if (base > 0 && result > 0) {
-        var LL_LIMIT = Math.exp(10);
-        var resultOffScale = result > LL_LIMIT;
-        var resultExp = Math.floor(Math.log10(Math.abs(result)));
-        var fractionalBase = base < 1;
-
-        // Versalog way: use LL0 (red) scales for fractional base when available. Base on e.g. LL02, right index of C at base, cursor to exponent on C, read result on LL0.
-        var baseDownLabel = fractionalBase ? llDownScaleForValue(base) : null;
-        var baseDownScaleName = fractionalBase ? findLLDownScaleNameForValue(base) : null;
-        var resultDownLabel = (fractionalBase && result > 0 && result < 1) ? llDownScaleForValue(result) : null;
-        var resultDownScaleName = (fractionalBase && result > 0 && result < 1) ? findLLDownScaleNameForValue(result) : null;
-        if (fractionalBase && baseDownScaleName && result > 0 && result < 1) {
-          ensureBack();
-          var scalesToShow = [baseDownScaleName, 'C', 'D'];
-          if (resultDownScaleName && resultDownScaleName !== baseDownScaleName) scalesToShow.push(resultDownScaleName);
-          steps.push({ action: function () { ensureSide(scalesToShow); sidesUsed.back = true; }, delay: 100 });
-          steps.push({ action: function () { undimScales(scalesToShow); changeMarkings('hairline', true); }, delay: 500 });
-          var expM = (exp <= 10) ? exp : exp / Math.pow(10, Math.floor(Math.log10(exp)));
-          var cIndexPosFrac = llPowerCIndex(base, result);
-          steps.push({ action: displayMessageWithExponent('Power ' + formatSigFig(base, PREC) + '^' + exp + ' (Versalog): base &lt; 1, use the Red LL0 scales. Step 1: Set the ' + cIndexPosFrac.label + ' of the C scale over ' + formatSigFig(base, PREC) + ' on the ' + (baseDownLabel || 'LL02') + ' scale.'), delay: delayMsg });
-          steps.push({ action: function () { ensureSide(scalesToShow); cursorTo(baseDownScaleName, base); slideTo('C', cIndexPosFrac.index); }, delay: delayAction });
-          steps.push({ action: displayMessageWithExponent('Step 2: Move the hairline to ' + formatSigFig(expM, PREC) + ' on the C scale (exponent ' + exp + ').'), delay: delayMsg });
-          steps.push({ action: function () { ensureSide(scalesToShow); cursorTo('C', expM); }, delay: delayAction });
-          steps.push({ action: displayMessageWithExponent('Step 3: Read the result under the hairline on the ' + (resultDownLabel || 'LL03') + ' scale (one scale deeper than base): ' + formatSigFig(result, PREC_FINAL) + '.'), delay: delayMsg });
-          currentExp = resultExp;
-          exponentLogReason = 'power: result exponent';
-          lastWasBack = true;
-          lastResultOnD = false;
-        } else if (resultOffScale || (fractionalBase && !baseDownScaleName)) {
-          // Result exceeds LL3, or fractional base but no LL0 scales: use L-scale log method log10(a^b) = b × log10(a).
-          var log10Base = Math.log10(base);
-          var product = exp * log10Base;
-          var characteristic = Math.floor(product);
-          var logMantissa = product - characteristic;
-          if (logMantissa < 0) logMantissa += 1;
-          var resultMantissaFromLog = Math.pow(10, logMantissa);
-          var dVal = (log10Base < 0)
-            ? (Math.abs(log10Base) >= 0.1 ? Math.abs(log10Base) * 10 : Math.abs(log10Base) * 100)
-            : (log10Base >= 1 ? log10Base : log10Base * 10);
-          var cVal = exp <= 10 ? exp : exp / Math.pow(10, Math.floor(Math.log10(exp)));
-          var multProduct = dVal * cVal;
-          var useRightIndex = multProduct > 10;
-          var cIndex = useRightIndex ? 10 : 1;
-          var readOnD = useRightIndex ? multProduct / 10 : multProduct;
-          function toSigFigs(x, n) { if (x === 0 || !isFinite(x)) return x; return Number(Number(x).toPrecision(n)); }
-          var log10BaseD = toSigFigs(log10Base, 3);
-          var productD = toSigFigs(product, 4);
-          var logMantissaD = toSigFigs(logMantissa, 3);
-          var resultMantD = toSigFigs(resultMantissaFromLog, 3);
-          var resultD = toSigFigs(result, 3);
-          var magLogD = toSigFigs(Math.abs(log10Base), 4);
-          var productMagD = toSigFigs(exp * Math.abs(log10Base), 4);
-          var indexLabel = useRightIndex ? 'right index (10)' : 'left index (1)';
-          var lScaleName = profile.scaleL;
-          ensureBack();
-          currentExp = 0;
-          exponentLogReason = 'log method';
-          steps.push({ action: function () { ensureSide([lScaleName, 'C', 'D']); sidesUsed.back = true; }, delay: 100 });
-          steps.push({ action: function () { undimScales([lScaleName, 'C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          var logMethodIntro = resultOffScale
-            ? (formatSigFig(base, 2) + '^' + exp + ' = ' + resultD + '×10^' + characteristic + ' exceeds the end of the LL3 scale (~22,026). Use the log method: log₁₀(a^b) = b × log₁₀(a).')
-            : (formatSigFig(base, 2) + '^' + exp + ' has a fractional base; LL0 scales not available. Use the L-scale method: log₁₀(a^b) = b × log₁₀(a). For base &lt; 1, log₁₀(base) is negative.');
-          steps.push({ action: displayMessageWithExponent(logMethodIntro), delay: delayMsg });
-          var stepAMsg = fractionalBase
-            ? ('Step A: Find log₁₀(' + formatSigFig(base, 2) + '). Cursor to ' + formatSigFig(manBase.m, PREC) + ' on D; read on L. For base &lt; 1, log₁₀(' + formatSigFig(base, 2) + ') ≈ ' + log10BaseD + ' (negative); use its magnitude |log₁₀| = ' + magLogD + ' for the next step.')
-            : ('Step A: Find log₁₀(' + formatSigFig(base, 2) + '). Cursor to ' + formatSigFig(manBase.m, PREC) + ' on D; read on L: log₁₀(' + formatSigFig(base, 2) + ') ≈ ' + log10BaseD + '.');
-          steps.push({ action: displayMessageWithExponent(stepAMsg), delay: delayMsg });
-          steps.push({ action: function () { cursorTo('D', manBase.m); }, delay: delayAction });
-          var stepBMsg = fractionalBase
-            ? ('Step B: Compute ' + exp + ' × ' + magLogD + ' = ' + productMagD + ' on C and D. Set the ' + indexLabel + ' of C over ' + formatSigFig(dVal, PREC) + ' on D (D shows ' + formatSigFig(dVal, PREC) + ' representing |log₁₀| = ' + magLogD + '). Move the cursor to ' + formatSigFig(cVal, PREC) + ' on C. Read ' + productMagD + ' on D.')
-            : ('Step B: Compute ' + exp + ' × ' + log10BaseD + ' on C and D. Set the ' + indexLabel + ' of C over ' + formatSigFig(dVal, PREC) + ' on D (representing ' + log10BaseD + '). Move the cursor to ' + formatSigFig(cVal, PREC) + ' on the C scale (representing ' + exp + ').' + (useRightIndex ? ' Using the right index keeps 6.6 on C to the left, over the result on D.' : ''));
-          steps.push({ action: displayMessageWithExponent(stepBMsg), delay: delayMsg });
-          steps.push({ action: function () { ensureSide([lScaleName, 'C', 'D']); cursorTo('D', dVal); slideTo('C', cIndex); }, delay: delayAction });
-          steps.push({ action: function () { cursorTo('C', cVal); }, delay: delayAction });
-          currentExp = characteristic;
-          exponentLogReason = 'log\u2081\u2080(result) characteristic';
-          var stepCMsg = fractionalBase
-            ? ('Step C: Since the log was negative, log₁₀(result) = ' + productD + '. Characteristic ' + characteristic + ', mantissa of log ≈ ' + logMantissaD + '. Result = ' + resultMantD + ' × 10^' + characteristic + '.')
-            : ('Step C: Read ' + formatSigFig(readOnD, PREC_FINAL) + ' on D (i.e. ' + productD + '). Characteristic ' + characteristic + ', mantissa of log ≈ ' + logMantissaD + '.');
-          steps.push({ action: displayMessageWithExponent(stepCMsg), delay: delayMsg });
-          currentExp = resultExp;
-          exponentLogReason = 'power: result exponent';
-          var stepDMsg = fractionalBase
-            ? ('Step D: Antilog: move the slide so the left index (1) of C is over ' + resultMantD + ' on D. With characteristic ' + characteristic + ', the answer is ' + resultMantD + ' × 10^' + characteristic + ' = ' + resultD + '.')
-            : ('Step D: Antilog: move the slide so the left index (1) of C is over the result mantissa on D (≈ ' + resultMantD + '). The answer is on the D scale under the index.');
-          steps.push({ action: displayMessageWithExponent(stepDMsg), delay: delayMsg });
-          steps.push({ action: function () { ensureSide([lScaleName, 'C', 'D']); cursorTo('D', resultMantissaFromLog); slideTo('C', 1); }, delay: delayAction });
-          steps.push({ action: displayMessageWithExponent('Result: ' + formatSigFig(base, 2) + '^' + exp + ' = ' + resultMantD + ' × 10^' + characteristic + ' ≈ ' + resultD + '. Read the result mantissa on D under the index.'), delay: delayMsg });
-          currentMantissa = manResult.m;
-          currentExp = resultExp;
-          exponentLogReason = 'power: result exponent';
-          lastWasBack = true;
-          lastResultOnD = true;
-        } else {
-          var baseScaleLabel = llScaleForValue(base);
-          var baseScaleName = findLLScaleNameForValue(base);
-          var resultScaleLabel = llScaleForValue(result);
+          var scalesToShowP = [baseScaleName, 'C', 'D'];
           var resultScaleName = findLLScaleNameForValue(result);
-          if (baseScaleLabel && baseScaleName) {
-            ensureBack();
-            var scalesToShow = [baseScaleName, 'C', 'D'];
-            if (resultScaleName && resultScaleName !== baseScaleName) scalesToShow.push(resultScaleName);
-            steps.push({ action: function () { ensureSide(scalesToShow); sidesUsed.back = true; }, delay: 100 });
-            steps.push({ action: function () { undimScales(scalesToShow); changeMarkings('hairline', true); }, delay: 500 });
-            var expM;
-            if (exp < 0.1) expM = exp * 100;
-            else if (exp < 1) expM = exp * 10;
-            else if (exp <= 10) expM = exp;
-            else expM = exp / Math.pow(10, Math.floor(Math.log10(exp)));
-            var scaleJumpHint = '';
-            if (exp < 1 && exp >= 0.1) scaleJumpHint = ' Exponent between 0.1 and 1.0: result is one scale down (e.g. LL3 → LL2).';
-            else if (exp < 0.1 && exp >= 0.01) scaleJumpHint = ' Exponent between 0.01 and 0.1: result is two scales down (e.g. LL3 → LL1).';
-            else if (exp < 0.01 && exp > 0) scaleJumpHint = ' Exponent &lt; 0.01: result is three scales down.';
-            var resultReadD = formatSigFig(result, PREC_FINAL);
-            var cIndexPos = llPowerCIndex(base, result);
-            steps.push({ action: displayMessageWithExponent('Power ' + formatSigFig(base, PREC) + '^' + exp + ' using LL scales: set the cursor so the hairline is over ' + formatSigFig(base, PREC) + ' on the ' + baseScaleLabel + ' scale.'), delay: delayMsg });
-            steps.push({ action: function () { cursorTo(baseScaleName, base); }, delay: delayAction });
-            steps.push({ action: displayMessageWithExponent('Move the slide so the ' + cIndexPos.label + ' of the C scale is under the cursor. The rule is now set for base ' + formatSigFig(base, PREC) + '.'), delay: delayMsg });
-            steps.push({ action: function () { slideTo('C', cIndexPos.index); }, delay: delayAction });
-            steps.push({ action: displayMessageWithExponent('Move the cursor to ' + formatSigFig(expM, PREC) + ' on the C scale (representing exponent ' + exp + ').' + (exp > 10 ? ' Use ' + formatSigFig(expM, PREC) + ' because ' + exp + ' is off the physical C scale.' : (exp < 1 ? ' For exponent &lt; 1 the result appears on a lower LL scale.' : '')) + scaleJumpHint), delay: delayMsg });
-            steps.push({ action: function () { cursorTo('C', expM); }, delay: delayAction });
-            steps.push({ action: displayMessageWithExponent('Read ' + resultReadD + ' under the cursor on the ' + (resultScaleLabel || baseScaleLabel) + ' scale. (Do not use the D scale here—it is log-log; the value under the cursor on D is not the result mantissa.)'), delay: delayMsg });
-            currentExp = resultExp;
-            exponentLogReason = 'power: result exponent';
-            lastWasBack = true;
-            lastResultOnD = false;
-          } else {
-            steps.push({ action: displayMessageWithExponent('Power ' + exp + ': use C/D chain or not supported; result is ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
-          }
+          if (resultScaleName && resultScaleName !== baseScaleName) scalesToShowP.push(resultScaleName);
+          steps.push({ action: function () { ensureSide(scalesToShowP); sidesUsed.back = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales(scalesToShowP); changeMarkings('hairline', true); }, delay: 500 });
+          var expM = (exp < 0.1) ? exp * 100 : (exp < 1) ? exp * 10 : (exp <= 10) ? exp : exp / Math.pow(10, Math.floor(Math.log10(exp)));
+          var cIndexPos = llPowerCIndex(base, result);
+          steps.push({ action: displayMessageWithExponent('Power ' + formatSigFig(base, PREC) + '^' + exp + ': set the cursor over ' + formatSigFig(base, PREC) + ' on the ' + (baseScaleLabel || baseScaleName) + ' scale.'), delay: delayMsg });
+          steps.push({ action: function () { cursorTo(baseScaleName, base); }, delay: delayAction });
+          steps.push({ action: function () { slideTo('C', cIndexPos.index); }, delay: delayAction });
+          steps.push({ action: function () { cursorTo('C', expM); }, delay: delayAction });
+          steps.push({ action: displayMessageWithExponent('Read ' + formatSigFig(result, PREC_FINAL) + ' under the cursor on the ' + (resultScaleName || baseScaleName) + ' scale.'), delay: delayMsg });
+          currentExp = Math.floor(Math.log10(Math.abs(result)));
+          exponentLogReason = 'power: result exponent';
+          lastWasBack = true;
+          lastResultOnD = false;
+        } else {
+          steps.push({ action: displayMessageWithExponent('Power ' + exp + ': result ' + formatSigFig(result, PREC_FINAL) + ' (use C/D or log method if needed).'), delay: delayMsg });
         }
-      } else {
-        steps.push({ action: displayMessageWithExponent('Power ' + exp + ': use C/D chain or not supported; result is ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
       }
     }
 
@@ -848,17 +686,19 @@
       var manArg = toMantissa(arg);
       var manResult = toMantissa(result);
       currentMantissa = manResult.m;
+      var r1 = scaleName('R1');
+      var r2 = scaleName('R2');
       if (isFinalOp) {
         ensureBack();
         var nDigits = digitsLeftOfDecimal(arg);
         var useR1 = (nDigits % 2 === 1);
-        var rScale = useR1 ? 'R1' : 'R2';
-        var rHint = useR1 ? 'Odd number of digits to the left of the decimal → use R1.' : 'Even number of digits to the left of the decimal → use R2.';
-        steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.back = true; }, delay: 100 });
-        steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
+        var rScale = useR1 ? r1 : r2;
+        var rHint = useR1 ? 'Odd number of digits to the left of the decimal → use ' + r1 + '.' : 'Even number of digits to the left of the decimal → use ' + r2 + '.';
+        steps.push({ action: function () { ensureSide([r1, r2, 'D']); sidesUsed.back = true; }, delay: 100 });
+        steps.push({ action: function () { undimScales([r1, r2, 'D']); changeMarkings('hairline', true); }, delay: 500 });
         currentExp = manResult.exp;
         exponentLogReason = 'sqrt: exponent \u00f7 2';
-        steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(arg, PREC) + ' (final result): use the R scales for higher precision. Set the cursor on ' + formatSigFig(manArg.m, PREC) + ' on the D scale and read the result on ' + rScale + '. ' + rHint), delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(arg, PREC) + ' (final result): set the cursor on ' + formatSigFig(manArg.m, PREC) + ' on the D scale and read the result on ' + rScale + '. ' + rHint), delay: delayMsg });
         steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
         steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScale + ' scale.'), delay: delayMsg });
         lastResultOnD = false;
@@ -880,14 +720,13 @@
         } else {
           var nDigitsSqrt = digitsLeftOfDecimal(arg);
           var useR1Sqrt = (nDigitsSqrt % 2 === 1);
-          var rScaleSqrt = useR1Sqrt ? 'R1' : 'R2';
-          var rHintSqrt = useR1Sqrt ? 'Odd number of digits to the left of the decimal → use R1.' : 'Even number of digits to the left of the decimal → use R2.';
-          var sqrtReadRounded = formatSigFig(result, PREC_FINAL);
-          steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.front = true; }, delay: 100 });
-          steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
-          steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(arg, PREC) + ': use R scales. Set cursor on ' + formatSigFig(manArg.m, PREC) + ' on D, read ' + sqrtReadRounded + ' on ' + rScaleSqrt + '. ' + rHintSqrt), delay: delayMsg });
+          var rScaleSqrt = useR1Sqrt ? r1 : r2;
+          var rHintSqrt = useR1Sqrt ? 'Odd number of digits to the left of the decimal → use ' + r1 + '.' : 'Even number of digits to the left of the decimal → use ' + r2 + '.';
+          steps.push({ action: function () { ensureSide([r1, r2, 'D']); sidesUsed.front = true; }, delay: 100 });
+          steps.push({ action: function () { undimScales([r1, r2, 'D']); changeMarkings('hairline', true); }, delay: 500 });
+          steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(arg, PREC) + ': set cursor on ' + formatSigFig(manArg.m, PREC) + ' on D, read ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScaleSqrt + '. ' + rHintSqrt), delay: delayMsg });
           steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
-          steps.push({ action: displayMessageWithExponent('Result ' + sqrtReadRounded + ' on ' + rScaleSqrt + ' scale. The cursor is not a memory—you must re-enter this value on C or D for the next step.'), delay: delayMsg });
+          steps.push({ action: displayMessageWithExponent('Result on ' + rScaleSqrt + ' scale. Re-enter this value on C or D for the next step.'), delay: delayMsg });
           currentExp = manResult.exp;
           exponentLogReason = 'sqrt: exponent \u00f7 2';
           lastResultOnD = false;
@@ -906,7 +745,7 @@
       steps.push({ action: function () { ensureSide(scaleNames); sidesUsed.back = true; }, delay: 100 });
       steps.push({ action: function () { undimScales(scaleNames); changeMarkings('hairline', true); }, delay: 500 });
       if (useST) {
-        steps.push({ action: displayMessageWithExponent('Angle ' + formatSigFig(arg, PREC) + '\u00b0 is below the S scale range (~5.7\u00b0). Use the ST scale: cursor to ' + formatSigFig(arg, PREC) + ' on ST, read on D (result 0.01\u20130.1).'), delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Angle ' + formatSigFig(arg, PREC) + '\u00b0 is below the S scale range (~5.7\u00b0). Use the SRT scale: cursor to ' + formatSigFig(arg, PREC) + ' on SRT, read on D.'), delay: delayMsg });
         steps.push({ action: function () { cursorTo('SRT', arg); }, delay: delayAction });
       } else {
         steps.push({ action: displayMessageWithExponent('Sine of ' + formatSigFig(arg, PREC) + ' degrees: cursor to angle on S, read value on D.'), delay: delayMsg });
@@ -932,10 +771,10 @@
       steps.push({ action: function () { ensureSide(scaleNames); sidesUsed.back = true; }, delay: 100 });
       steps.push({ action: function () { undimScales(scaleNames); changeMarkings('hairline', true); }, delay: 500 });
       if (useST) {
-        steps.push({ action: displayMessageWithExponent('cos(θ) = sin(90−θ). Angle 90−' + formatSigFig(arg, PREC) + '\u00b0 = ' + formatSigFig(comp, PREC) + '\u00b0 is below S scale range. Use ST: cursor to ' + formatSigFig(comp, PREC) + ' on ST, read on D.'), delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('cos(θ) = sin(90−θ). Use SRT: cursor to ' + formatSigFig(comp, PREC) + '\u00b0 on SRT, read on D.'), delay: delayMsg });
         steps.push({ action: function () { cursorTo('SRT', comp); }, delay: delayAction });
       } else {
-        steps.push({ action: displayMessageWithExponent('Cosine of ' + formatSigFig(arg, PREC) + ' degrees: cos(θ) = sin(90−θ). Cursor to ' + formatSigFig(comp, PREC) + ' on S, read on D.'), delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Cosine: cos(θ) = sin(90−θ). Cursor to ' + formatSigFig(comp, PREC) + '\u00b0 on S, read on D.'), delay: delayMsg });
         steps.push({ action: function () { cursorTo('S', comp); }, delay: delayAction });
       }
       steps.push({ action: displayMessageWithExponent('Read cos = ' + formatSigFig(result, PREC_FINAL) + ' on D.'), delay: delayMsg });
@@ -968,12 +807,13 @@
       var arg = op.arg;
       var result = op.result;
       ensureBack();
-      steps.push({ action: function () { ensureSide([profile.scaleL, 'D']); sidesUsed.back = true; }, delay: 100 });
-      steps.push({ action: function () { undimScales([profile.scaleL, 'D']); changeMarkings('hairline', true); }, delay: 500 });
+      var lScale = profile.scaleL || 'L';
+      steps.push({ action: function () { ensureSide([lScale, 'D']); sidesUsed.back = true; }, delay: 100 });
+      steps.push({ action: function () { undimScales([lScale, 'D']); changeMarkings('hairline', true); }, delay: 500 });
       var manArg = toMantissa(arg);
       steps.push({ action: displayMessageWithExponent('Log10 of ' + formatSigFig(arg, PREC) + ': cursor to value on D, read on L.'), delay: delayMsg });
       steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
-      steps.push({ action: displayMessageWithExponent('Read log10 = ' + formatSigFig(result, PREC_FINAL) + ' on the L scale. The L scale gives the mantissa (decimal part)—' + formatSigFig(result, PREC_FINAL) + ' is the actual value for the next step.'), delay: delayMsg });
+      steps.push({ action: displayMessageWithExponent('Read log10 = ' + formatSigFig(result, PREC_FINAL) + ' on the L scale.'), delay: delayMsg });
       currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
       currentExp = result !== 0 && isFinite(result) ? Math.floor(Math.log10(Math.abs(result))) : 0;
       exponentLogReason = 'log result (value for next step)';
@@ -991,11 +831,9 @@
         ensureBack();
         steps.push({ action: function () { ensureSide([llScaleName, 'D']); sidesUsed.back = true; }, delay: 100 });
         steps.push({ action: function () { undimScales([llScaleName, 'D']); changeMarkings('hairline', true); }, delay: 500 });
-        var resultRead = formatSigFig(result, PREC_FINAL);
-        var rangeHint = (llScaleLabel === 'LL3') ? '1.0 to 10.0' : (llScaleLabel === 'LL2') ? '0.1 to 1.0' : '0.01 to 0.1';
-        steps.push({ action: displayMessageWithExponent('Natural log of ' + formatSigFig(arg, PREC) + ': On this rule, the D scale and LL scales are aligned so ln(y) is read directly. Find ' + formatSigFig(arg, PREC) + ' on the ' + llScaleLabel + ' scale.'), delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Natural log of ' + formatSigFig(arg, PREC) + ': find ' + formatSigFig(arg, PREC) + ' on the ' + llScaleLabel + ' scale, read ln on D.'), delay: delayMsg });
         steps.push({ action: function () { cursorTo(llScaleName, arg); }, delay: delayAction });
-        steps.push({ action: displayMessageWithExponent('Place the hairline over ' + formatSigFig(arg, PREC) + ' on ' + llScaleLabel + '. Read the digits under the cursor on the D scale. ' + llScaleLabel + ' gives ln between ' + rangeHint + ', so ln(' + formatSigFig(arg, PREC) + ') = ' + resultRead + '.'), delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Read ln = ' + formatSigFig(result, PREC_FINAL) + ' on the D scale.'), delay: delayMsg });
         currentMantissa = result >= 1 && result < 10 ? result : (result < 1 ? result * 10 : result / 10);
         if (currentMantissa >= 10) currentMantissa /= 10;
         currentExp = result !== 0 && isFinite(result) ? Math.floor(Math.log10(Math.abs(result))) : 0;
@@ -1004,8 +842,9 @@
         lastResultOnD = true;
       } else {
         ensureBack();
-        steps.push({ action: function () { ensureSide([profile.scaleL, 'D']); sidesUsed.back = true; }, delay: 100 });
-        steps.push({ action: function () { undimScales([profile.scaleL, 'D']); changeMarkings('hairline', true); }, delay: 500 });
+        var lScale = profile.scaleL || 'L';
+        steps.push({ action: function () { ensureSide([lScale, 'D']); sidesUsed.back = true; }, delay: 100 });
+        steps.push({ action: function () { undimScales([lScale, 'D']); changeMarkings('hairline', true); }, delay: 500 });
         steps.push({ action: displayMessageWithExponent('Natural log of ' + formatSigFig(arg, PREC) + ': cursor to value on D, read log10 on L. Then ln(x) = log10(x) × 2.303.'), delay: delayMsg });
         steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
         steps.push({ action: displayMessageWithExponent('Read log10 on L, then ln(x) = log10(x) × 2.303 = ' + formatSigFig(result, PREC_FINAL)), delay: delayMsg });
@@ -1057,7 +896,6 @@
           }
           isFirstInit = false;
         }
-        // Second and later inits (e.g. 3.5 in 2*3.5) are second factors; no steps here.
       } else if (op.op === '*') stepMultiply(op);
       else if (op.op === '/') {
         var out = stepDivide(op, divisionChain ? divisionIndexInChain : -1, divisionChain, chainSlideShift, cursorAtIndex);
@@ -1078,11 +916,13 @@
 
     var finalVal = finalResult;
     var finalMan = toMantissa(finalResult);
+    var r1 = scaleName('R1');
+    var r2 = scaleName('R2');
     steps.unshift({ action: function () { if (typeof resetSlidePosition === 'function') resetSlidePosition(); ensureSide(['C', 'D']); cursorTo('D', 1); slideTo('C', 1); }, delay: 0 });
     var _resultExp = currentExp;
     var _resultReason = exponentLogReason;
     steps.push({ action: function () {
-      if (lastWasFinalSqrt) ensureSide(['R1', 'R2', 'D']);
+      if (lastWasFinalSqrt) ensureSide([r1, r2, 'D']);
       else if (lastWasBack) ensureSide(['S', 'D']);
       else ensureSide(['C', 'D']);
       isolate();
@@ -1099,7 +939,6 @@
     }, delay: delayObj });
     steps.push({ action: function () { isolate(); message('Try again or enter another equation.'); }, delay: 4000 });
 
-    // Mark visible steps: those that show an instruction (message) or move cursor/slide. Setup-only (ensureSide, undimScales) are not visible.
     for (var vi = 0; vi < steps.length; vi++) {
       var actionStr = steps[vi].action.toString();
       var setupOnly = (actionStr.indexOf('ensureSide') !== -1 && actionStr.indexOf('message') === -1 && actionStr.indexOf('cursorTo') === -1 && actionStr.indexOf('slideTo') === -1) ||

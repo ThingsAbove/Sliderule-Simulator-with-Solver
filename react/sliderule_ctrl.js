@@ -298,7 +298,9 @@ var cursorTo = function (name, value) {
         for (var s in rule . scales) {
           var scale = rule . scales [s];
           if (scaleLabelMatches (scale . left, name)) {
-            var target = scale . location (value) + rule . target;
+            var ruleTarget = rule . target;
+            if (ruleTarget === undefined || ruleTarget !== ruleTarget) ruleTarget = 0;
+            var target = scale . location (value) + ruleTarget;
             for (var tss in sliderules . sliderules) sliderules . sliderules [tss] . cursor_target = target;
             sliderules . requireRedraw = true;
             return;
@@ -322,7 +324,9 @@ var slideTo = function (name, value) {
           for (var s in rule . scales) {
             var scale = rule . scales [s];
             if (scaleLabelMatches (scale . left, name)) {
-              target = sliderule . cursor_target - scale . location (value);
+              var cursorTarget = sliderule . cursor_target;
+              if (cursorTarget === undefined || cursorTarget !== cursorTarget) cursorTarget = 0;
+              target = cursorTarget - scale . location (value);
               rule . target = target;
               slideToPosition (target);
               sliderules . requireRedraw = true;
