@@ -290,6 +290,7 @@ var ensureSide = function (names) {
 };
 
 var cursorTo = function (name, value) {
+  var fallbackTarget = null;
   for (var sr in sliderules . sliderules) {
     var sliderule = sliderules . sliderules [sr];
     if (! sliderule . inactive) {
@@ -301,13 +302,20 @@ var cursorTo = function (name, value) {
             var ruleTarget = rule . target;
             if (ruleTarget === undefined || ruleTarget !== ruleTarget) ruleTarget = 0;
             var target = scale . location (value) + ruleTarget;
-            for (var tss in sliderules . sliderules) sliderules . sliderules [tss] . cursor_target = target;
-            sliderules . requireRedraw = true;
-            return;
+            if (rule . stator != 0) {
+              for (var tss in sliderules . sliderules) sliderules . sliderules [tss] . cursor_target = target;
+              sliderules . requireRedraw = true;
+              return;
+            }
+            if (fallbackTarget === null) fallbackTarget = target;
           }
         }
       }
     }
+  }
+  if (fallbackTarget !== null) {
+    for (var tss in sliderules . sliderules) sliderules . sliderules [tss] . cursor_target = fallbackTarget;
+    sliderules . requireRedraw = true;
   }
 };
 
@@ -428,11 +436,28 @@ var checkValue = function (name, value, tolerance) {
 }
 
 var sequencerTimeout = null;
+var resultHighlightTimeout = null;
+window . slideruleResultHighlight = window . slideruleResultHighlight || { scale: null, value: null, mode: null, startedAt: 0 };
+var clearResultHighlight = function () {
+  if (window . slideruleResultHighlight) window . slideruleResultHighlight . mode = null;
+  if (typeof sliderules !== 'undefined') sliderules . requireRedraw = true;
+};
+var setResultHighlight = function (scale, value, isFinal) {
+  if (! window . slideruleResultHighlight) window . slideruleResultHighlight = { scale: null, value: null, mode: null, startedAt: 0 };
+  window . slideruleResultHighlight . scale = scale;
+  window . slideruleResultHighlight . value = value != null ? value : null;
+  window . slideruleResultHighlight . startedAt = Date . now ();
+  window . slideruleResultHighlight . mode = isFinal ? 'continuous' : 'blink_twice';
+  if (resultHighlightTimeout) clearTimeout (resultHighlightTimeout);
+  if (! isFinal) resultHighlightTimeout = setTimeout (function () { clearResultHighlight (); resultHighlightTimeout = null; }, 1200);
+  if (typeof sliderules !== 'undefined') sliderules . requireRedraw = true;
+};
 var sequencer = function (steps, index, onStep) {
   if (! steps) return;
   if (index === undefined) { sequencerTimeout = setTimeout (function () { sequencer (steps, 0, onStep); }, steps [0] . delay); return; }
   if (index >= steps . length) return;
   steps [index] . action ();
+  if (steps [index] . resultScale != null) setResultHighlight (steps [index] . resultScale, steps [index] . resultValue, !! steps [index] . isFinalStep);
   if (typeof onStep === 'function') onStep (index + 1);
   index += 1;
   if (index >= steps . length) return;
@@ -466,14 +491,17 @@ var dynamicTutorialStepForward = function () {
   var s = dynamicTutorialState;
   if (! s . steps || s . index >= s . steps . length) return;
   clearTimeout (sequencerTimeout);
+  clearResultHighlight ();
   do {
     s . steps [s . index] . action ();
+    if (s . steps [s . index] . resultScale != null) setResultHighlight (s . steps [s . index] . resultScale, s . steps [s . index] . resultValue, !! s . steps [s . index] . isFinalStep);
     s . index += 1;
   } while (s . index < s . steps . length && s . steps [s . index] . visible === false);
 };
 var dynamicTutorialStepBack = function () {
   var s = dynamicTutorialState;
   clearTimeout (sequencerTimeout);
+  clearResultHighlight ();
   if (! s . steps || s . index <= 0) return;
   var prev = dynamicTutorialPrevVisibleIndex (s . steps, s . index);
   s . index = prev;
@@ -527,6 +555,7 @@ var playLesson = function (lessons, info) {
 
 var playDynamicLesson = function (steps, info, onStepCallback) {
 	clearTimeout (sequencerTimeout);
+	clearResultHighlight ();
 	if (info == undefined) info = 'info';
 	var el = document . getElementById (info);
 	if (el) el . innerHTML = "";

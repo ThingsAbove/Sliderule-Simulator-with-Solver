@@ -6,6 +6,7 @@
   var lastDynamicSteps = null;
 
   function onGenerateDynamicTutorial() {
+    if (typeof clearResultHighlight === 'function') clearResultHighlight();
     var input = document.getElementById('equation_input');
     var errEl = document.getElementById('equation_error');
     var areaEl = document.getElementById('equation_problem_area');
@@ -55,6 +56,7 @@
   }
 
   function onReplayDynamicTutorial() {
+    if (typeof clearResultHighlight === 'function') clearResultHighlight();
     if (lastDynamicSteps && lastDynamicSteps.length) {
       document.getElementById('info').innerHTML = '';
       playDynamicLesson(lastDynamicSteps, 'info', updateTutorialStepControls);
