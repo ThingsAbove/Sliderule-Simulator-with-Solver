@@ -138,17 +138,20 @@
       return ((e % 3) + 3) % 3;
     }
 
-    function ensureFront() {
+    function ensureFront(requiredScales) {
+      var scales = requiredScales || ['C', 'D'];
       if (!sidesUsed.front) {
         sidesUsed.front = true;
-        steps.push({ action: function () { ensureSide(['C', 'D']); }, delay: 100 });
+        steps.push({
+          action: function () {
+            ensureSide(scales);
+          },
+          delay: 100
+        });
       }
     }
     function ensureFrontWithCI() {
-      if (!sidesUsed.front) {
-        sidesUsed.front = true;
-        steps.push({ action: function () { ensureSide(['C', 'D', 'CI']); }, delay: 100 });
-      }
+      ensureFront(['C', 'D', 'CI']);
     }
     function isDivisionChain(ops) {
       for (var j = 0; j < ops.length; j++) {
@@ -156,10 +159,16 @@
       }
       return false;
     }
-    function ensureBack() {
+    function ensureBack(requiredScales) {
+      var scales = requiredScales || ['S', 'D'];
       if (!sidesUsed.back) {
         sidesUsed.back = true;
-        steps.push({ action: function () { ensureSide(['S', 'D']); }, delay: 100 });
+        steps.push({
+          action: function () {
+            ensureSide(scales);
+          },
+          delay: 100
+        });
       }
     }
 
@@ -307,12 +316,15 @@
       } else {
         useCF = true;
       }
-      var nextExp = manProd . exp;
+      var nextExp = manProd.exp;
       var nextReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp + (useRightIndex ? ' + 1 (index shift: slide left)' : '');
       var cIndex = useRightIndex ? 10 : 1;
       var rScaleCursorMsg = afterRScaleSqrt ? ('Move the cursor to ' + formatSigFig(cursorCVal, PREC_FINAL) + ' on the C scale (the second factor).') : null;
-      var useCI = lastResultOnD && !afterRScaleSqrt;
-      if (useCI && preferBack && profile.hasCIOnBack === false) useCI = false;
+      // For the Deci-Lon tutorial, prefer the standard C/DF workflows over CI
+      // so that simple products like 2*3 use a single slide move (index to first
+      // factor on D, then cursor to second factor on C) instead of a CI-based
+      // sequence that requires extra slide movements.
+      var useCI = false;
       if (useCI) {
         lastMultiplyWasCI = true;
         currentExp = nextExp;
@@ -321,10 +333,10 @@
         var ciIndexLabel = (ciMultiplyIndex === 10) ? 'right index (10)' : 'left index (1)';
         steps.push({ action: function () { undimScales(['C', 'D', 'CI']); changeMarkings('hairline', true); }, delay: 500 });
         steps.push({ action: displayMessageWithExponent('First factor is already on D (under the cursor). Without moving the cursor, move the slide so ' + formatSigFig(cursorCVal, PREC) + ' on the CI scale is under the cursor. Read the product on D under the ' + ciIndexLabel + '.'), delay: delayMsg });
-        var tValNum = Number(transferVal);
+        var tValNum = Number(firstFactor);
         var cValNum = Number(cursorCVal);
         var idxNum = Number(ciMultiplyIndex);
-        if (!isFinite(tValNum)) tValNum = transferVal;
+        if (!isFinite(tValNum)) tValNum = firstFactor;
         if (!isFinite(cValNum)) cValNum = cursorCVal;
         if (!isFinite(idxNum)) idxNum = ciMultiplyIndex;
         steps.push({
