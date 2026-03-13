@@ -84,8 +84,12 @@
     }
     var lastResultOnD = true;
     var lastWasFinalSqrt = false;
+    /** Argument to final sqrt (Sq1/Sq2 choice uses digit count of arg, not of sqrt result). */
+    var lastFinalSqrtArg = null;
     var lastResultFromRScale = false;
     var lastMultiplyWasCI = false;
+    /** Last multiply used folded CF/DF; result mantissa read on body DF scale (not bottom D). */
+    var lastMultiplyUsedFoldedCF = false;
 
     var exponentLogReason = '\u2014';
     function displayMessageWithExponent(t) {
@@ -106,6 +110,15 @@
     function positionCI(shift, x) { return shift + (1 - Math.log10(x)); }
     function positionCIF(shift, x) { return shift + (1 - Math.log10(x * Math.PI)); }
     function inRange(pos) { return pos >= -limitL && pos <= 1 + limitR; }
+    /** True if multiplying firstM×secondM on C/D needs right index (10) over D first — same rule as stepMultiply. */
+    function multiplyWantsRightIndexFirst(firstM, secondM) {
+      if (secondM >= 0.9995 && secondM <= 1.0005) return false;
+      var shiftLeft = Math.log10(firstM);
+      var shiftRight = shiftLeft - 1;
+      if (inRange(positionC(shiftLeft, secondM))) return false;
+      if (inRange(positionC(shiftRight, secondM))) return true;
+      return false;
+    }
     function chooseDivisionMethod(chainSlideShift, divisorM) {
       if (chainSlideShift == null) return 'C';
       if (inRange(positionCI(chainSlideShift, divisorM))) return 'CI';
@@ -361,10 +374,12 @@
         steps.push({ action: displayMessageWithExponent('Read intermediate result ' + prodMsg + ' on D under the ' + ciIndexLabel + '.'), delay: delayMsg, resultScale: 'D', resultValue: prodMsg });
       } else if (useCF) {
         lastMultiplyWasCI = false;
+        lastMultiplyUsedFoldedCF = true;
+        lastResultOnD = false;
         currentExp = nextExp;
         exponentLogReason = nextReason;
         steps.push({ action: function () { undimScales(['CF', 'DF']); changeMarkings('hairline', true); }, delay: 500 });
-        steps.push({ action: displayMessageWithExponent('Second factor ' + formatSigFig(cursorCVal, PREC) + ' would be off C; use folded scales. Set cursor to ' + formatSigFig(firstFactor, PREC) + ' on DF, align index on CF, then cursor to ' + formatSigFig(cursorCVal, PREC) + ' on CF and read product on DF.'), delay: delayMsg });
+        steps.push({ action: displayMessageWithExponent('Second factor ' + formatSigFig(cursorCVal, PREC) + ' would be off C; use folded scales. Cursor to ' + formatSigFig(firstFactor, PREC) + ' on DF (top). Align index 1 on CF (slide) under the hairline. Cursor to ' + formatSigFig(cursorCVal, PREC) + ' on CF. Read mantissa ' + prodMsg + ' on DF (top), not on D (bottom). Full value ' + formatSigFig(prod, PREC_FINAL) + '.'), delay: delayMsg });
         steps.push({ action: function () {
           if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['CF', 'DF']) && typeof changeSide === 'function') changeSide('front');
           ensureSide(['CF', 'DF']);
@@ -372,7 +387,7 @@
         }, delay: delayAction });
         steps.push({ action: function () { slideTo('CF', 1); }, delay: delayAction });
         steps.push({ action: function () { cursorTo('CF', cursorCVal); }, delay: delayAction });
-        steps.push({ action: displayMessageWithExponent('Read intermediate result ' + prodMsg + ' on DF.'), delay: delayMsg, resultScale: 'DF', resultValue: prodMsg });
+        steps.push({ action: displayMessageWithExponent('Under the hairline on DF (folded scale): ' + prodMsg + '. Adjust decimal \u2192 ' + formatSigFig(prod, PREC_FINAL) + '.'), delay: delayMsg, resultScale: 'DF', resultValue: prodMsg });
       } else {
         lastMultiplyWasCI = false;
         steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
@@ -650,7 +665,7 @@
           steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScaleSqrtPow + ' scale.'), delay: delayMsg, resultScale: rScaleSqrtPow, resultValue: formatSigFig(result, PREC_FINAL) });
         }
         currentExp = Math.floor(currentExp / 2);
-        exponentLogReason = 'sqrt: exponent \u00f7 2';
+        exponentLogReason = 'sqrt: halve n in \u00d710^n (' + manBase.exp + '\u00f72 \u2192 ' + manResult.exp + ')';
       } else if (exp === 3) {
         ensureFront();
         steps.push({ action: function () { ensureSide([kScale, 'D']); sidesUsed.front = true; }, delay: 100 });
@@ -737,13 +752,14 @@
         steps.push({ action: function () { ensureSide([r1, r2, 'D']); sidesUsed.back = true; }, delay: 100 });
         steps.push({ action: function () { undimScales([r1, r2, 'D']); changeMarkings('hairline', true); }, delay: 500 });
         currentExp = manResult.exp;
-        exponentLogReason = 'sqrt: exponent \u00f7 2';
+        exponentLogReason = 'sqrt: halve n in \u00d710^n (' + manArg.exp + '\u00f72 \u2192 ' + manResult.exp + '; e.g. ' + formatSigFig(arg, PREC) + ' \u2248 ' + formatSigFig(manArg.m, PREC) + '\u00d710^' + manArg.exp + ')';
         steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(arg, PREC) + ' (final result): set the cursor on ' + formatSigFig(manArg.m, PREC) + ' on the D scale and read the result on ' + rScale + '. ' + rHint), delay: delayMsg });
         steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
         steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScale + ' scale.'), delay: delayMsg, resultScale: rScale, resultValue: formatSigFig(result, PREC_FINAL) });
         lastResultOnD = false;
         lastWasBack = true;
         lastWasFinalSqrt = true;
+        lastFinalSqrtArg = arg;
       } else {
         ensureFront();
         if (profile.hasA) {
@@ -755,7 +771,7 @@
           steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
           steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on D scale.'), delay: delayMsg, resultScale: 'D', resultValue: formatSigFig(result, PREC_FINAL) });
           currentExp = manResult.exp;
-          exponentLogReason = 'sqrt: exponent \u00f7 2';
+          exponentLogReason = 'sqrt: halve n in \u00d710^n (' + manArg.exp + '\u00f72 \u2192 ' + manResult.exp + ')';
           lastResultOnD = true;
         } else {
           var nDigitsSqrt = digitsLeftOfDecimal(arg);
@@ -768,7 +784,7 @@
           steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
           steps.push({ action: displayMessageWithExponent('Result on ' + rScaleSqrt + ' scale. Re-enter this value on C or D for the next step.'), delay: delayMsg, resultScale: rScaleSqrt, resultValue: formatSigFig(result, PREC_FINAL) });
           currentExp = manResult.exp;
-          exponentLogReason = 'sqrt: exponent \u00f7 2';
+          exponentLogReason = 'sqrt: halve n in \u00d710^n (' + manArg.exp + '\u00f72 \u2192 ' + manResult.exp + ')';
           lastResultOnD = false;
           lastResultFromRScale = true;
         }
@@ -940,18 +956,14 @@
           } else if (divisionChain) {
             stepInitForDivision(op);
           } else if (i + 1 < ops.length && ops[i + 1].op === '*') {
-            var useRightIndex = false;
-            if (i + 2 < ops.length && ops[i + 1].op === 'init' && ops[i + 2].op === '*') {
-              var secondVal = ops[i + 1].value;
-              var manSecond = toMantissa(secondVal);
-              if (op.value * manSecond.m >= 10) useRightIndex = true;
-            }
+            var multOp = ops[i + 1];
+            var firstM = toMantissa(op.value).m;
+            var secondM = toMantissa(multOp.right).m;
+            var useRightIndex = multiplyWantsRightIndexFirst(firstM, secondM);
             stepInit(op, useRightIndex);
           } else if (i + 2 < ops.length && ops[i + 1].op === 'init' && ops[i + 2].op === '*') {
-            var useRightIndexDenom = false;
-            var secondValDenom = ops[i + 1].value;
-            var manSecondDenom = toMantissa(secondValDenom);
-            if (op.value * manSecondDenom.m >= 10) useRightIndexDenom = true;
+            var multAhead = ops[i + 2];
+            var useRightIndexDenom = multiplyWantsRightIndexFirst(toMantissa(op.value).m, toMantissa(multAhead.right).m);
             stepInit(op, useRightIndexDenom);
           } else {
             var nextOp = (i + 1 < ops.length) ? ops[i + 1].op : null;
@@ -992,7 +1004,9 @@
     var finalMan = toMantissa(finalResult);
     var r1 = scaleName('R1');
     var r2 = scaleName('R2');
-    var finalResultScale = resultOnDI ? 'DI' : (lastWasFinalSqrt ? (digitsLeftOfDecimal(finalVal) % 2 === 1 ? r1 : r2) : 'D');
+    var finalResultScale = resultOnDI ? 'DI' : (lastWasFinalSqrt
+      ? (digitsLeftOfDecimal(lastFinalSqrtArg != null ? lastFinalSqrtArg : finalVal) % 2 === 1 ? r1 : r2)
+      : (lastMultiplyUsedFoldedCF ? 'DF' : 'D'));
     if (!isReciprocalOnly) steps.unshift({ action: function () { if (typeof resetSlidePosition === 'function') resetSlidePosition(); ensureSide(['C', 'D']); cursorTo('D', 1); slideTo('C', 1); }, delay: 0 });
     var _resultExp = currentExp;
     var _resultReason = exponentLogReason;
@@ -1000,11 +1014,13 @@
       if (resultOnDI) ensureSide(['D', 'DI']);
       else if (lastWasFinalSqrt) ensureSide([r1, r2, 'D']);
       else if (lastWasBack) ensureSide(['S', 'D']);
+      else if (lastMultiplyUsedFoldedCF) ensureSide(['CF', 'DF']);
       else ensureSide(['C', 'D']);
       isolate();
       sliderules.objective = function () {
         var ok = false;
         if (resultOnDI) ok = checkValue('DI', finalMan.m);
+        else if (lastMultiplyUsedFoldedCF) ok = checkValue('DF', finalMan.m);
         else if (lastResultOnD) ok = checkValue('D', finalMan.m);
         else ok = true;
         if (ok) {
