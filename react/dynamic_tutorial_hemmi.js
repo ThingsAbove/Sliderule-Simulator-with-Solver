@@ -79,6 +79,8 @@
     var lastResultFromRScale = false;
     /** After CI multiply, result is under the right index; next multiply can be done by cursor to C only (no slide move). */
     var lastMultiplyWasCI = false;
+    var tutorialInitSlideC = null;
+    var tutorialInitDVal = null;
 
     /** Exponent log scratchpad: reason for last change (shown at end of every instruction). */
     var exponentLogReason = '\u2014';
@@ -104,6 +106,13 @@
     function positionCI(shift, x) { return shift + (1 - Math.log10(x)); }
     function positionCIF(shift, x) { return shift + (1 - Math.log10(x * Math.PI)); }
     function inRange(pos) { return pos >= -limitL && pos <= 1 + limitR; }
+    function multiplyWantsRightIndexFirst(firstM, secondM) {
+      if (secondM >= 0.9995 && secondM <= 1.0005) return false;
+      var shiftLeft = Math.log10(firstM);
+      if (inRange(positionC(shiftLeft, secondM))) return false;
+      if (inRange(positionC(shiftLeft - 1, secondM))) return true;
+      return false;
+    }
     function chooseDivisionMethod(chainSlideShift, divisorM) {
       if (chainSlideShift == null) return 'C';
       if (inRange(positionCI(chainSlideShift, divisorM))) return 'CI';
@@ -178,12 +187,16 @@
       steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
       steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
       steps.push({ action: displayMessageWithExponent('First factor is ' + formatSigFig(v, PREC) + '. Move the slide so the ' + indexLabel + ' on C is over ' + formatSigFig(v, PREC) + ' on the D scale.' + indexReason), delay: delayMsg });
-      steps.push({ action: function () {
-        if (typeof changeSide === 'function') changeSide('front');
-        ensureSide(['C', 'D']);
-        cursorTo('D', dVal);
-        slideTo('C', cIndex);
-      }, delay: delayAction });
+      steps.push({ action: (function (_cIdx, _dVal) {
+        return function () {
+          if (typeof changeSide === 'function') changeSide('front');
+          ensureSide(['C', 'D']);
+          cursorTo('D', _dVal);
+          slideTo('C', _cIdx);
+          tutorialInitSlideC = _cIdx;
+          tutorialInitDVal = _dVal;
+        };
+      })(cIndex, dVal), delay: delayAction });
     }
 
     function stepInitForDivision(op) {
@@ -195,6 +208,8 @@
       exponentLogReason = 'dividend ' + formatSigFig(man.m, PREC) + '\u00d710^' + man.exp;
       lastWasBack = false;
       lastResultOnD = true;
+      tutorialInitSlideC = null;
+      tutorialInitDVal = null;
       ensureFront();
       steps.push({ action: displayMessageWithExponent('Calculate: ' + equationStr), delay: 500 });
       steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
@@ -295,6 +310,8 @@
       var rScaleCursorMsg = afterRScaleSqrt ? ('Move the cursor to ' + formatSigFig(cursorCVal, PREC_FINAL) + ' on the C scale (the second factor).') : null;
       var useCI = resultWasOnD && !afterRScaleSqrt;
       if (useCI) {
+        tutorialInitSlideC = null;
+        tutorialInitDVal = null;
         lastMultiplyWasCI = true;
         exponentLogReason = 'multiply by ' + formatSigFig(manB.m, PREC) + '\u00d710^' + manB.exp;
         var ciMultiplyIndex = whichIndexCIMultiply(firstFactor, cursorCVal);
@@ -315,6 +332,8 @@
         });
         steps.push({ action: displayMessageWithExponent('Read intermediate result ' + prodMsg + ' on D under the ' + ciIndexLabel + '.'), delay: delayMsg });
       } else if (useCF) {
+        tutorialInitSlideC = null;
+        tutorialInitDVal = null;
         lastMultiplyWasCI = false;
         steps.push({ action: function () { undimScales(['CF', 'DF']); changeMarkings('hairline', true); }, delay: 500 });
         steps.push({ action: displayMessageWithExponent('Second factor ' + formatSigFig(cursorCVal, PREC) + ' would be off C; use folded scales. Set cursor to ' + formatSigFig(firstFactor, PREC) + ' on DF, align index on CF, then cursor to ' + formatSigFig(cursorCVal, PREC) + ' on CF and read product on DF.'), delay: delayMsg });
@@ -328,17 +347,32 @@
         steps.push({ action: displayMessageWithExponent('Read intermediate result ' + prodMsg + ' on DF.'), delay: delayMsg });
       } else {
         lastMultiplyWasCI = false;
+        var skipRepeatSlide = (tutorialInitSlideC != null && tutorialInitDVal != null && !afterRScaleSqrt &&
+          tutorialInitSlideC === cIndex && Math.abs(tutorialInitDVal - firstFactor) < 1e-9);
+        if (skipRepeatSlide) {
+          tutorialInitSlideC = null;
+          tutorialInitDVal = null;
+        } else {
+          tutorialInitSlideC = null;
+          tutorialInitDVal = null;
+        }
         steps.push({ action: function () { undimScales(['C', 'D']); changeMarkings('hairline', true); }, delay: 500 });
         var msgSetSlide = (useRightIndex ? 'Move the slide so the right index (10) on C is over ' : (afterRScaleSqrt ? 'Set the first factor: move the slide so the left index (1) on C is over ' : 'Move the slide so the left index (1) on C is over ')) + formatSigFig(firstFactor, PREC) + ' on the D scale.';
         var msgCursor = rScaleCursorMsg || ('Move the cursor to ' + formatSigFig(cursorCVal, PREC) + ' on the C scale.');
-        steps.push({ action: displayMessageWithExponent(msgSetSlide), delay: delayMsg });
-        steps.push({ action: function () {
-          if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
-          ensureSide(['C', 'D']);
-          cursorTo('D', firstFactor);
-        }, delay: delayAction });
-        steps.push({ action: function () { slideTo('C', cIndex); }, delay: delayAction });
-        steps.push({ action: displayMessageWithExponent(msgCursor), delay: delayMsg });
+        if (!skipRepeatSlide) {
+          steps.push({ action: displayMessageWithExponent(msgSetSlide), delay: delayMsg });
+          steps.push({ action: function () {
+            if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') changeSide('front');
+            ensureSide(['C', 'D']);
+            cursorTo('D', firstFactor);
+          }, delay: delayAction });
+          steps.push({ action: function () { slideTo('C', cIndex); }, delay: delayAction });
+        } else {
+          steps.push({ action: displayMessageWithExponent('Slide is already set from the first step. ' + msgCursor), delay: delayMsg });
+        }
+        if (!skipRepeatSlide) {
+          steps.push({ action: displayMessageWithExponent(msgCursor), delay: delayMsg });
+        }
         steps.push({ action: function () { cursorTo('C', cursorCVal); }, delay: delayAction });
         var readMsg = afterRScaleSqrt ? ('Read result ' + formatSigFig(prod, PREC_FINAL) + ' on D.') : ('Read intermediate result ' + prodMsg + ' on D.' + (useRightIndex ? ' (Adjust decimal: result is ' + prodMsg + '.)' : ''));
         steps.push({ action: displayMessageWithExponent(readMsg), delay: delayMsg });
@@ -412,6 +446,26 @@
       currentExp = manQuot.exp;
       exponentLogReason = 'divide by ' + formatSigFig(manDiv.m, PREC) + '\u00d710^' + manDiv.exp + (readIndex === 10 ? ' \u22121 (index shift: slide left)' : '');
       var indexLabel = (readIndex === 10) ? 'right index (10)' : 'left index (1)';
+      // For a standalone division (or the first division in a chain), the cursor must be
+      // explicitly placed on the dividend on the D scale before sliding to the divisor.
+      // Previously we assumed the cursor was already on the dividend, which was not true
+      // after a preceding multiply chain inside parentheses (e.g. 1/(2*pi*...)).
+      if (!inDivisionChain || divisionIndexInChain === 0) {
+        steps.push({
+          action: displayMessageWithExponent('Set the cursor to ' + formatSigFig(dividend, PREC) + ' on the D scale (the dividend).'),
+          delay: delayMsg
+        });
+        steps.push({
+          action: function () {
+            if (typeof currentSideHasScales === 'function' && !currentSideHasScales(['C', 'D']) && typeof changeSide === 'function') {
+              changeSide('front');
+            }
+            ensureSide(['C', 'D']);
+            cursorTo('D', dividend);
+          },
+          delay: delayAction
+        });
+      }
       if (inDivisionChain && divisionIndexInChain > 0) {
         if (cursorAtIndex) {
           steps.push({ action: displayMessageWithExponent('Divide by ' + formatSigFig(divisor, PREC) + ': Move the slide so ' + formatSigFig(divisorM, PREC) + ' on the C scale is under the cursor. The intermediate result (' + quotMsg + ') is now located on the D scale under the slide index.'), delay: delayMsg });
@@ -560,7 +614,7 @@
           steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScaleSqrtPow + ' scale.'), delay: delayMsg });
         }
         currentExp = Math.floor(currentExp / 2);
-        exponentLogReason = 'sqrt: exponent \u00f7 2';
+        exponentLogReason = 'sqrt: halve n in \u00d710^n (' + manBase.exp + '\u00f72 \u2192 ' + manResult.exp + ')';
       } else if (exp === 3) {
         ensureFront();
         steps.push({ action: function () { ensureSide(['K', 'D']); sidesUsed.front = true; }, delay: 100 });
@@ -837,7 +891,7 @@
         steps.push({ action: function () { ensureSide(['R1', 'R2', 'D']); sidesUsed.back = true; }, delay: 100 });
         steps.push({ action: function () { undimScales(['R1', 'R2', 'D']); changeMarkings('hairline', true); }, delay: 500 });
         currentExp = manResult.exp;
-        exponentLogReason = 'sqrt: exponent \u00f7 2';
+        exponentLogReason = 'sqrt: halve n in \u00d710^n (' + manArg.exp + '\u00f72 \u2192 ' + manResult.exp + '; e.g. ' + formatSigFig(arg, PREC) + ' \u2248 ' + formatSigFig(manArg.m, PREC) + '\u00d710^' + manArg.exp + ')';
         steps.push({ action: displayMessageWithExponent('Square root of ' + formatSigFig(arg, PREC) + ' (final result): use the R scales for higher precision. Set the cursor on ' + formatSigFig(manArg.m, PREC) + ' on the D scale and read the result on ' + rScale + '. ' + rHint), delay: delayMsg });
         steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
         steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on ' + rScale + ' scale.'), delay: delayMsg });
@@ -855,7 +909,7 @@
           steps.push({ action: function () { cursorTo('A', aVal); }, delay: delayAction });
           steps.push({ action: displayMessageWithExponent('Result ' + formatSigFig(result, PREC_FINAL) + ' on D scale.'), delay: delayMsg });
           currentExp = manResult.exp;
-          exponentLogReason = 'sqrt: exponent \u00f7 2';
+          exponentLogReason = 'sqrt: halve n in \u00d710^n (' + manArg.exp + '\u00f72 \u2192 ' + manResult.exp + ')';
           lastResultOnD = true;
         } else {
           var nDigitsSqrt = digitsLeftOfDecimal(arg);
@@ -869,7 +923,7 @@
           steps.push({ action: function () { cursorTo('D', manArg.m); }, delay: delayAction });
           steps.push({ action: displayMessageWithExponent('Result ' + sqrtReadRounded + ' on ' + rScaleSqrt + ' scale. The cursor is not a memory—you must re-enter this value on C or D for the next step.'), delay: delayMsg });
           currentExp = manResult.exp;
-          exponentLogReason = 'sqrt: exponent \u00f7 2';
+          exponentLogReason = 'sqrt: halve n in \u00d710^n (' + manArg.exp + '\u00f72 \u2192 ' + manResult.exp + ')';
           lastResultOnD = false;
           lastResultFromRScale = true;
         }
@@ -1014,13 +1068,11 @@
           } else if (divisionChain) {
             stepInitForDivision(op);
           } else if (i + 1 < ops.length && ops[i + 1].op === '*') {
-            var useRightIndex = false;
-            if (i + 2 < ops.length && ops[i + 1].op === 'init' && ops[i + 2].op === '*') {
-              var secondVal = ops[i + 1].value;
-              var manSecond = toMantissa(secondVal);
-              if (op.value * manSecond.m >= 10) useRightIndex = true;
-            }
-            stepInit(op, useRightIndex);
+            var multOpH = ops[i + 1];
+            stepInit(op, multiplyWantsRightIndexFirst(toMantissa(op.value).m, toMantissa(multOpH.right).m));
+          } else if (i + 2 < ops.length && ops[i + 1].op === 'init' && ops[i + 2].op === '*') {
+            var multAheadH = ops[i + 2];
+            stepInit(op, multiplyWantsRightIndexFirst(toMantissa(op.value).m, toMantissa(multAheadH.right).m));
           } else {
             var nextOp = (i + 1 < ops.length) ? ops[i + 1].op : null;
             var unaryOnly = (nextOp === 'sqrt' || nextOp === 'sin' || nextOp === 'cos' || nextOp === 'tan' || nextOp === 'log' || nextOp === 'ln' || nextOp === '^');
